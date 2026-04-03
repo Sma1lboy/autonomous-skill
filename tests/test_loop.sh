@@ -568,6 +568,126 @@ rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
 cleanup_repo "$REPO"
 echo ""
 
+# ── test_resume_specific_branch ──────────────────────────────────────
+echo "── test_resume_specific_branch ──"
+REPO=$(setup_repo)
+
+# First, create a session branch with a commit on it
+git -C "$REPO" checkout -b "auto/session-999" main 2>/dev/null
+echo "session work" > "$REPO/session-work.txt"
+git -C "$REPO" add session-work.txt
+git -C "$REPO" commit -m "session work" --no-gpg-sign --quiet 2>/dev/null
+git -C "$REPO" checkout main 2>/dev/null
+
+# Resume that specific branch
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_REPO="$REPO" \
+  MOCK_CLAUDE_COST=0.10 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --resume auto/session-999 "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "Resuming Session" "--resume shows resuming banner"
+assert_contains "$OUTPUT" "auto/session-999" "--resume uses specified branch"
+assert_contains "$OUTPUT" "Resuming branch" "--resume prints resuming message"
+
+# Verify we're back on main and the session branch still exists
+CURRENT=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null)
+assert_eq "$CURRENT" "main" "resume returns to main after completion"
+assert_branch_exists "$REPO" "auto/session-999" "session branch still exists after resume"
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
+# ── test_resume_latest_branch ────────────────────────────────────────
+echo "── test_resume_latest_branch ──"
+REPO=$(setup_repo)
+
+# Create two session branches — latest should be picked
+git -C "$REPO" checkout -b "auto/session-100" main 2>/dev/null
+echo "old" > "$REPO/old.txt"
+git -C "$REPO" add old.txt
+git -C "$REPO" commit -m "old session" --no-gpg-sign --quiet 2>/dev/null
+git -C "$REPO" checkout main 2>/dev/null
+
+sleep 1  # ensure creatordate differs
+
+git -C "$REPO" checkout -b "auto/session-200" main 2>/dev/null
+echo "new" > "$REPO/new.txt"
+git -C "$REPO" add new.txt
+git -C "$REPO" commit -m "new session" --no-gpg-sign --quiet 2>/dev/null
+git -C "$REPO" checkout main 2>/dev/null
+
+# Resume without specifying branch — should pick auto/session-200
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_REPO="$REPO" \
+  MOCK_CLAUDE_COST=0.10 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --resume "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "auto/session-200" "--resume picks latest session branch"
+assert_contains "$OUTPUT" "Resuming Session" "--resume latest shows resuming banner"
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
+# ── test_resume_nonexistent_branch ───────────────────────────────────
+echo "── test_resume_nonexistent_branch ──"
+REPO=$(setup_repo)
+
+OUTPUT=$(cd "$REPO" && \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --resume auto/session-nonexistent "$REPO" 2>&1 || true)
+
+assert_contains "$OUTPUT" "not found" "--resume nonexistent branch shows error"
+
+cleanup_repo "$REPO"
+echo ""
+
+# ── test_resume_no_branches ──────────────────────────────────────────
+echo "── test_resume_no_branches ──"
+REPO=$(setup_repo)
+
+OUTPUT=$(cd "$REPO" && \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --resume "$REPO" 2>&1 || true)
+
+assert_contains "$OUTPUT" "no auto/session" "--resume with no branches shows error"
+
+cleanup_repo "$REPO"
+echo ""
+
+# ── test_resume_in_dry_run ───────────────────────────────────────────
+echo "── test_resume_in_dry_run ──"
+REPO=$(setup_repo)
+
+# Create a session branch
+git -C "$REPO" checkout -b "auto/session-555" main 2>/dev/null
+git -C "$REPO" checkout main 2>/dev/null
+
+OUTPUT=$(cd "$REPO" && bash "$LOOP" --dry-run --resume auto/session-555 "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "would resume" "--resume in dry-run shows would resume"
+assert_contains "$OUTPUT" "auto/session-555" "--resume in dry-run shows branch name"
+
+cleanup_repo "$REPO"
+echo ""
+
+# ── test_help_lists_resume ───────────────────────────────────────────
+echo "── test_help_lists_resume ──"
+OUTPUT=$(bash "$LOOP" --help 2>&1)
+assert_contains "$OUTPUT" "resume" "--help lists --resume"
+echo ""
+
 # ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════

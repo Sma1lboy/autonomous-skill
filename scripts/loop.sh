@@ -19,6 +19,9 @@ Arguments:
 
 Options:
   --dry-run                Show discovered tasks and config, then exit
+  --resume [BRANCH]        Continue on an existing session branch instead of
+                           creating a new one. If BRANCH is omitted, resumes
+                           the most recent auto/session-* branch.
   --max-iterations N       Max loop iterations (default: 50, 0=unlimited)
   --max-cost N             Session cost budget in USD (default: unlimited)
   --direction TEXT         Focus prompt — tells the agent what to work on
@@ -46,6 +49,8 @@ Examples:
   loop.sh --max-cost 2.00              # stop after $2 spent
   loop.sh --direction "fix all linting errors" ./repo
   loop.sh --timeout 600 --max-iterations 10 ./repo
+  loop.sh --resume                     # continue most recent session
+  loop.sh --resume auto/session-12345  # continue specific session
 EOF
   exit 0
 }
@@ -53,6 +58,7 @@ EOF
 # ─── Argument parsing ──────────────────────────────────────────────
 DRY_RUN=0
 PROJECT_DIR="."
+RESUME_BRANCH=""
 
 MAX_COST_ARG=""
 MAX_ITER_ARG=""
@@ -62,6 +68,16 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --help|-h) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --resume=*) RESUME_BRANCH="${1#*=}"; shift ;;
+    --resume)
+      # --resume takes an optional branch argument; peek at next arg
+      # Only consume it if it looks like a branch name (not a directory path)
+      if [ $# -ge 2 ] && [ "${2#-}" = "$2" ] && ! [ -d "$2" ]; then
+        RESUME_BRANCH="$2"; shift 2
+      else
+        RESUME_BRANCH="__latest__"; shift
+      fi
+      ;;
     --max-cost) MAX_COST_ARG="$2"; shift 2 ;;
     --max-cost=*) MAX_COST_ARG="${1#*=}"; shift ;;
     --max-iterations) MAX_ITER_ARG="$2"; shift 2 ;;
@@ -217,7 +233,17 @@ if [ "$DRY_RUN" -eq 1 ]; then
   [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null && echo "  Iterations: unlimited" || echo "  Iterations: $MAX_ITERATIONS"
   echo "  Timeout: ${CC_TIMEOUT}s per iteration"
   echo "$MAX_COST_USD" | grep -qE '^0(\.0+)?$' && echo "  Budget: unlimited" || echo "  Budget: \$$MAX_COST_USD"
-  echo "  Branch: $SESSION_BRANCH (would create)"
+  if [ -n "$RESUME_BRANCH" ]; then
+    # Resolve __latest__ for display
+    DISPLAY_BRANCH="$RESUME_BRANCH"
+    if [ "$DISPLAY_BRANCH" = "__latest__" ]; then
+      DISPLAY_BRANCH=$(git -C "$PROJECT_DIR" for-each-ref --sort=-creatordate --format='%(refname:short)' 'refs/heads/auto/session-*' 2>/dev/null | head -1)
+      [ -z "$DISPLAY_BRANCH" ] && DISPLAY_BRANCH="(none found)"
+    fi
+    echo "  Branch: $DISPLAY_BRANCH (would resume)"
+  else
+    echo "  Branch: $SESSION_BRANCH (would create)"
+  fi
   echo "═══════════════════════════════════════════════════"
   echo ""
 
@@ -244,14 +270,41 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-# Create session branch (always base off main)
-if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
-  SESSION_BRANCH="auto/session-${SESSION_ID}-$$"
-  git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null
+# Create or resume session branch
+if [ -n "$RESUME_BRANCH" ]; then
+  # Resolve __latest__ to the most recent auto/session-* branch
+  if [ "$RESUME_BRANCH" = "__latest__" ]; then
+    RESUME_BRANCH=$(git -C "$PROJECT_DIR" for-each-ref --sort=-creatordate --format='%(refname:short)' 'refs/heads/auto/session-*' 2>/dev/null | head -1)
+    if [ -z "$RESUME_BRANCH" ]; then
+      echo "[loop] ERROR: no auto/session-* branch found to resume" >&2
+      exit 1
+    fi
+  fi
+  # Verify the branch exists
+  if ! git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$RESUME_BRANCH" 2>/dev/null; then
+    echo "[loop] ERROR: branch '$RESUME_BRANCH' not found" >&2
+    exit 1
+  fi
+  SESSION_BRANCH="$RESUME_BRANCH"
+  # Extract session ID from branch name for log continuity
+  SESSION_ID=$(echo "$SESSION_BRANCH" | grep -oE '[0-9]+' | tail -1)
+  [ -z "$SESSION_ID" ] && SESSION_ID=$(date +%s)
+  git -C "$PROJECT_DIR" checkout "$SESSION_BRANCH" 2>/dev/null
+  echo "[loop] Resuming branch: $SESSION_BRANCH"
+else
+  # Create new session branch (always base off main)
+  if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
+    SESSION_BRANCH="auto/session-${SESSION_ID}-$$"
+    git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null
+  fi
 fi
 
 echo "═══════════════════════════════════════════════════"
-echo "  Autonomous Skill — Session $SESSION_ID"
+if [ -n "$RESUME_BRANCH" ]; then
+  echo "  Autonomous Skill — Resuming Session $SESSION_ID"
+else
+  echo "  Autonomous Skill — Session $SESSION_ID"
+fi
 echo "  Project: $(basename "$PROJECT_DIR")"
 [ -n "$DIRECTION" ] && echo "  Direction: $DIRECTION"
 [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null && echo "  Iterations: unlimited" || echo "  Iterations: $MAX_ITERATIONS"

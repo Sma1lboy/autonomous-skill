@@ -33,8 +33,10 @@
 - [x] Add `--timeout` CLI flag (was env-var only via `CC_TIMEOUT`)
 - [x] Improve unknown flag error to suggest `--help`
 
+## Completed (v0.5)
+- [x] Add `--resume` flag — continue on existing session branch (12 new tests, 68 total)
+
 ## Open
-- [ ] Add `--resume` flag — continue on an existing session branch instead of creating new
 - [ ] Add `.autonomous-skill.yml` config file support for per-project settings
 - [ ] Improve live progress — use tail/offset instead of re-parsing full stream file
 - [ ] discover.sh: scan more file types for TODOs (`.tsx`, `.jsx`, `.cpp`, `.c`, `.md`)
