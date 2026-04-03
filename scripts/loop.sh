@@ -306,7 +306,9 @@ while [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null || [ "$ITERATION" -lt "$MAX_ITERAT
   # Run CC with timeout, streaming progress to stderr
   echo "[loop] Running CC... (timeout: ${CC_TIMEOUT}s)"
   CC_START=$(date +%s)
-  CC_STREAM_FILE=$(mktemp /tmp/autonomous-cc-XXXXXXXX.jsonl)
+  CC_STREAM_FILE=$(mktemp /tmp/autonomous-cc-XXXXXXXX)
+  mv "$CC_STREAM_FILE" "${CC_STREAM_FILE}.jsonl"
+  CC_STREAM_FILE="${CC_STREAM_FILE}.jsonl"
 
   timeout "$CC_TIMEOUT" claude "${CC_ARGS[@]}" < /dev/null > "$CC_STREAM_FILE" 2>/dev/null &
   CC_PID=$!
