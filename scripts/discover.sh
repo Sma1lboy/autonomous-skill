@@ -23,8 +23,8 @@ add_task() {
 if [ -f "$PROJECT_DIR/TODOS.md" ]; then
   while IFS= read -r line; do
     # Match lines starting with - [ ] (unchecked todos)
-    if echo "$line" | grep -qE '^\s*-\s*\[\s*\]'; then
-      task=$(echo "$line" | sed 's/^\s*-\s*\[\s*\]\s*//')
+    if echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[[:space:]]*\]'; then
+      task=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*\[[[:space:]]*\][[:space:]]*//')
       if [ -n "$task" ]; then
         add_task "$task" "TODOS.md" 3
       fi
@@ -32,7 +32,27 @@ if [ -f "$PROJECT_DIR/TODOS.md" ]; then
   done < "$PROJECT_DIR/TODOS.md"
 fi
 
-# Source 2: code comments containing TODO/FIXME/HACK keywords
+# Source 2: KANBAN.md (Todo section only)
+if [ -f "$PROJECT_DIR/KANBAN.md" ]; then
+  in_todo=0
+  while IFS= read -r line; do
+    # Detect section headers
+    if echo "$line" | grep -qE '^## Todo'; then
+      in_todo=1; continue
+    elif echo "$line" | grep -qE '^## '; then
+      in_todo=0; continue
+    fi
+    # Only pick up unchecked items from the Todo section
+    if [ "$in_todo" -eq 1 ] && echo "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[[:space:]]*\]'; then
+      task=$(echo "$line" | sed 's/^[[:space:]]*-[[:space:]]*\[[[:space:]]*\][[:space:]]*//')
+      if [ -n "$task" ]; then
+        add_task "$task" "KANBAN.md" 4
+      fi
+    fi
+  done < "$PROJECT_DIR/KANBAN.md"
+fi
+
+# Source 3: code comments containing TODO/FIXME/HACK keywords
 if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   while IFS= read -r match; do
     if [ -n "$match" ]; then
@@ -51,7 +71,7 @@ if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   done < <(git -C "$PROJECT_DIR" grep -n -i '\bTODO[: ]\|FIXME[: ]\|HACK[: ]' -- '*.ts' '*.js' '*.py' '*.rs' '*.go' '*.rb' '*.java' '*.sh' ':!scripts/discover.sh' 2>/dev/null | head -30 || true)
 fi
 
-# Source 3: GitHub issues (if gh is available and we're in a repo)
+# Source 4: GitHub issues (if gh is available and we're in a repo)
 if command -v gh >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
   while IFS=$'\t' read -r number title; do
     if [ -n "$title" ]; then

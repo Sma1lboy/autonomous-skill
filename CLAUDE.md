@@ -7,10 +7,11 @@ finding and fixing issues in any codebase.
 
 - `SKILL.md` — Claude Code skill entry point
 - `scripts/loop.sh` — Main autonomous loop (bash while-loop, spawns fresh CC per iteration)
-- `scripts/discover.sh` — Task discovery from TODOS.md, TODO comments, GitHub issues
+- `scripts/discover.sh` — Task discovery from TODOS.md, KANBAN.md, TODO comments, GitHub issues
 - `scripts/persona.sh` — OWNER.md auto-generation from git history + project docs
 - `OWNER.md.template` — Template for manual persona configuration
 - `TRACE.md` — Auto-maintained session history (commits, cost, duration per session)
+- `KANBAN.md` — Project board (Todo/Doing/Done), also used as task source by discover.sh
 
 ## How it works
 
