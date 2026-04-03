@@ -46,9 +46,9 @@
 ## Completed (v0.8)
 - [x] Add `scripts/status.sh` — session status dashboard with `--json` output
 - [x] Add `--status` flag to loop.sh
+- [x] Add `--stop` flag to loop.sh — graceful remote stop via sentinel file
 
 ## Open
-- [ ] Add `--stop` flag to loop.sh — create sentinel file to stop running session
 - [ ] Improve log aggregation — iterations/commits stats from session_end events
 - [ ] Add color output option to status.sh and report.sh
 - [ ] Support multiple project directories in status.sh (workspace overview)
