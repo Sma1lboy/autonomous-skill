@@ -3,12 +3,30 @@
 # Usage: report.sh [project-dir] [--json]
 set -euo pipefail
 
-PROJECT_DIR="${1:-.}"
+PROJECT_DIR="."
 OUTPUT_JSON=0
-if [ "${1:-}" = "--json" ]; then
-  OUTPUT_JSON=1; PROJECT_DIR="."
-elif [ "${2:-}" = "--json" ]; then
-  OUTPUT_JSON=1
+USE_COLOR="auto"
+
+for arg in "$@"; do
+  case "$arg" in
+    --json) OUTPUT_JSON=1 ;;
+    --color) USE_COLOR="always" ;;
+    --no-color) USE_COLOR="never" ;;
+    *) [ -d "$arg" ] && PROJECT_DIR="$arg" ;;
+  esac
+done
+
+# ─── Color setup ─────────────────────────────────────────────────
+if [ "$USE_COLOR" = "always" ] || { [ "$USE_COLOR" = "auto" ] && [ -t 1 ]; }; then
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_GREEN=$'\033[32m'
+  C_RED=$'\033[31m'
+  C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'
+  C_RESET=$'\033[0m'
+else
+  C_BOLD="" C_DIM="" C_GREEN="" C_RED="" C_YELLOW="" C_CYAN="" C_RESET=""
 fi
 
 SLUG=$(basename "$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_DIR")")
@@ -142,27 +160,27 @@ else
   TOTAL_DUR_FMT="N/A"
 fi
 
-echo "═══════════════════════════════════════════════════"
+echo "${C_BOLD}═══════════════════════════════════════════════════"
 echo "  AUTONOMOUS SKILL — SESSION REPORT"
 echo "  Project: $SLUG"
-echo "═══════════════════════════════════════════════════"
+echo "═══════════════════════════════════════════════════${C_RESET}"
 echo ""
-echo "  Sessions:       $SESSION_COUNT"
-echo "  Total cost:     \$$TOTAL_COST"
-echo "  Total commits:  $TOTAL_COMMITS"
-echo "  Total iters:    $TOTAL_ITERS"
-echo "  Total duration: $TOTAL_DUR_FMT"
-echo "  Success rate:   ${SUCCESS_RATE}%"
-echo "  Cost/commit:    \$$COST_PER_COMMIT"
-echo "  Cost/iter:      \$$COST_PER_ITER"
-echo "  Timeouts:       $TOTAL_TIMEOUTS"
-echo "  Budget stops:   $BUDGET_HITS"
+echo "  ${C_DIM}Sessions:${C_RESET}       $SESSION_COUNT"
+echo "  ${C_DIM}Total cost:${C_RESET}     ${C_CYAN}\$$TOTAL_COST${C_RESET}"
+echo "  ${C_DIM}Total commits:${C_RESET}  ${C_GREEN}$TOTAL_COMMITS${C_RESET}"
+echo "  ${C_DIM}Total iters:${C_RESET}    $TOTAL_ITERS"
+echo "  ${C_DIM}Total duration:${C_RESET} $TOTAL_DUR_FMT"
+echo "  ${C_DIM}Success rate:${C_RESET}   ${C_GREEN}${SUCCESS_RATE}%${C_RESET}"
+echo "  ${C_DIM}Cost/commit:${C_RESET}    ${C_CYAN}\$$COST_PER_COMMIT${C_RESET}"
+echo "  ${C_DIM}Cost/iter:${C_RESET}      ${C_CYAN}\$$COST_PER_ITER${C_RESET}"
+echo "  ${C_DIM}Timeouts:${C_RESET}       $TOTAL_TIMEOUTS"
+echo "  ${C_DIM}Budget stops:${C_RESET}   $BUDGET_HITS"
 echo ""
 
 # ─── Per-session table ────────────────────────────────────────────
-echo "─── Sessions ───────────────────────────────────────"
-printf "  %-12s  %-12s  %5s  %4s  %8s  %9s  %s\n" "SESSION" "DATE" "ITERS" "CMTS" "DURATION" "COST" "STATUS"
-printf "  %-12s  %-12s  %5s  %4s  %8s  %9s  %s\n" "───────────" "──────────" "─────" "────" "────────" "─────────" "──────"
+echo "${C_BOLD}─── Sessions ───────────────────────────────────────${C_RESET}"
+printf "  ${C_DIM}%-12s  %-12s  %5s  %4s  %8s  %9s  %s${C_RESET}\n" "SESSION" "DATE" "ITERS" "CMTS" "DURATION" "COST" "STATUS"
+printf "  ${C_DIM}%-12s  %-12s  %5s  %4s  %8s  %9s  %s${C_RESET}\n" "───────────" "──────────" "─────" "────" "────────" "─────────" "──────"
 
 echo "$SESSIONS" | jq -r '.[] |
   .session as $s |
@@ -182,19 +200,28 @@ echo "$SESSIONS" | jq -r '.[] |
    else "no-op" end) as $status |
   "\($s)\t\($date)\t\($iters)\t\($cmts)\t\($dur_fmt)\t\($cost)\t\($status)"
 ' | while IFS=$'\t' read -r session date iters cmts dur cost status; do
-  printf "  %-12s  %-12s  %5s  %4s  %8s  %9s  %s\n" "$session" "$date" "$iters" "$cmts" "$dur" "$cost" "$status"
+  case "$status" in
+    ok)      status_fmt="${C_GREEN}$status${C_RESET}" ;;
+    failed)  status_fmt="${C_RED}$status${C_RESET}" ;;
+    timeout) status_fmt="${C_YELLOW}$status${C_RESET}" ;;
+    budget)  status_fmt="${C_YELLOW}$status${C_RESET}" ;;
+    *)       status_fmt="$status" ;;
+  esac
+  printf "  %-12s  %-12s  %5s  %4s  %8s  ${C_CYAN}%9s${C_RESET}  %s\n" "$session" "$date" "$iters" "$cmts" "$dur" "$cost" "$status_fmt"
 done
 echo ""
 
 # ─── Top failures ─────────────────────────────────────────────────
 FAILURE_COUNT=$(echo "$TOP_FAILURES" | jq 'length')
 if [ "$FAILURE_COUNT" -gt 0 ]; then
-  echo "─── Top Failures ───────────────────────────────────"
-  echo "$TOP_FAILURES" | jq -r '.[] | "  (\(.count)x) \(.msg)"'
+  echo "${C_BOLD}─── Top Failures ───────────────────────────────────${C_RESET}"
+  echo "$TOP_FAILURES" | jq -r '.[] | "  (\(.count)x) \(.msg)"' | while IFS= read -r line; do
+    echo "  ${C_RED}$line${C_RESET}"
+  done
   echo ""
 fi
 
-echo "───────────────────────────────────────────────────"
+echo "${C_DIM}───────────────────────────────────────────────────"
 echo "  Log: $LOG_FILE"
 echo "  JSON: report.sh $PROJECT_DIR --json"
-echo "───────────────────────────────────────────────────"
+echo "───────────────────────────────────────────────────${C_RESET}"

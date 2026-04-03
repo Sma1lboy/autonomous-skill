@@ -7,13 +7,29 @@ set -euo pipefail
 
 PROJECT_DIR="."
 OUTPUT_JSON=0
+USE_COLOR="auto"
 
 for arg in "$@"; do
   case "$arg" in
     --json) OUTPUT_JSON=1 ;;
+    --color) USE_COLOR="always" ;;
+    --no-color) USE_COLOR="never" ;;
     *) [ -d "$arg" ] && PROJECT_DIR="$arg" ;;
   esac
 done
+
+# ─── Color setup ─────────────────────────────────────────────────
+if [ "$USE_COLOR" = "always" ] || { [ "$USE_COLOR" = "auto" ] && [ -t 1 ]; }; then
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_GREEN=$'\033[32m'
+  C_RED=$'\033[31m'
+  C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'
+  C_RESET=$'\033[0m'
+else
+  C_BOLD="" C_DIM="" C_GREEN="" C_RED="" C_YELLOW="" C_CYAN="" C_RESET=""
+fi
 
 # ─── Dependency check ─────────────────────────────────────────────
 for dep in jq git; do
@@ -150,33 +166,33 @@ if [ "$OUTPUT_JSON" -eq 1 ]; then
 fi
 
 # ─── Human-readable output ────────────────────────────────────────
-echo "═══════════════════════════════════════════════════"
+echo "${C_BOLD}═══════════════════════════════════════════════════"
 echo "  AUTONOMOUS STATUS — $SLUG"
-echo "═══════════════════════════════════════════════════"
+echo "═══════════════════════════════════════════════════${C_RESET}"
 echo ""
 
 # Active session
 if [ -n "$ACTIVE_SESSION" ]; then
-  echo "  Active session: $ACTIVE_SESSION"
+  echo "  ${C_DIM}Active session:${C_RESET} ${C_GREEN}$ACTIVE_SESSION${C_RESET}"
 else
-  echo "  Active session: (none)"
+  echo "  ${C_DIM}Active session:${C_RESET} (none)"
 fi
 
 # Sentinel
 if [ "$SENTINEL_ACTIVE" = "true" ]; then
-  echo "  Stop sentinel:  ACTIVE (will stop after current iteration)"
+  echo "  ${C_DIM}Stop sentinel:${C_RESET}  ${C_YELLOW}ACTIVE${C_RESET} (will stop after current iteration)"
 fi
 
 echo ""
 
 # Latest branch info
 if [ -n "$LATEST_BRANCH" ]; then
-  echo "─── Latest Branch ──────────────────────────────────"
-  echo "  Branch:      $LATEST_BRANCH"
-  echo "  Commits:     $LATEST_COMMITS ahead of $MAIN_BRANCH"
-  echo "  Files:       $LATEST_FILES changed"
-  echo "  Last commit: $LATEST_LAST_COMMIT"
-  echo "  Activity:    $LATEST_LAST_COMMIT_AGO"
+  echo "${C_BOLD}─── Latest Branch ──────────────────────────────────${C_RESET}"
+  echo "  ${C_DIM}Branch:${C_RESET}      $LATEST_BRANCH"
+  echo "  ${C_DIM}Commits:${C_RESET}     ${C_GREEN}$LATEST_COMMITS${C_RESET} ahead of $MAIN_BRANCH"
+  echo "  ${C_DIM}Files:${C_RESET}       $LATEST_FILES changed"
+  echo "  ${C_DIM}Last commit:${C_RESET} $LATEST_LAST_COMMIT"
+  echo "  ${C_DIM}Activity:${C_RESET}    $LATEST_LAST_COMMIT_AGO"
   echo ""
 else
   echo "  No session branches found."
@@ -185,12 +201,12 @@ fi
 
 # Cumulative stats (from log)
 if [ -f "$LOG_FILE" ]; then
-  echo "─── Cumulative Stats ───────────────────────────────"
-  echo "  Sessions:    $TOTAL_SESSIONS"
-  echo "  Iterations:  $TOTAL_ITERATIONS"
-  echo "  Commits:     $TOTAL_COMMITS_ALL"
-  echo "  Total cost:  \$$TOTAL_COST"
-  [ -n "$LAST_SESSION_DATE" ] && echo "  Last run:    $LAST_SESSION_DATE ($LAST_SESSION_STATUS)"
+  echo "${C_BOLD}─── Cumulative Stats ───────────────────────────────${C_RESET}"
+  echo "  ${C_DIM}Sessions:${C_RESET}    $TOTAL_SESSIONS"
+  echo "  ${C_DIM}Iterations:${C_RESET}  $TOTAL_ITERATIONS"
+  echo "  ${C_DIM}Commits:${C_RESET}     ${C_GREEN}$TOTAL_COMMITS_ALL${C_RESET}"
+  echo "  ${C_DIM}Total cost:${C_RESET}  ${C_CYAN}\$$TOTAL_COST${C_RESET}"
+  [ -n "$LAST_SESSION_DATE" ] && echo "  ${C_DIM}Last run:${C_RESET}    $LAST_SESSION_DATE ($LAST_SESSION_STATUS)"
   echo ""
 else
   echo "  No log file found. Run a session first."
@@ -198,11 +214,11 @@ else
 fi
 
 # Quick actions
-echo "───────────────────────────────────────────────────"
+echo "${C_DIM}───────────────────────────────────────────────────"
 if [ -n "$LATEST_BRANCH" ] && [ "$LATEST_COMMITS" -gt 0 ]; then
   echo "  Review: git log $MAIN_BRANCH..$LATEST_BRANCH --oneline"
   echo "  Merge:  git checkout $MAIN_BRANCH && git merge $LATEST_BRANCH"
 fi
 echo "  Report: bash scripts/report.sh"
 echo "  JSON:   bash scripts/status.sh --json"
-echo "───────────────────────────────────────────────────"
+echo "───────────────────────────────────────────────────${C_RESET}"

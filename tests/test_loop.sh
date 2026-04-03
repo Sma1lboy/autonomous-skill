@@ -1101,6 +1101,93 @@ rm -rf "$SDATA_DIR"
 cleanup_repo "$REPO"
 echo ""
 
+# ─── Test: report.sh color flags ─────────────────────────────────
+echo "── test_report_color_flags ──"
+REPO=$(setup_repo)
+SLUG=$(basename "$REPO")
+CDATA_DIR="$HOME/.autonomous-skill/projects/$SLUG"
+mkdir -p "$CDATA_DIR"
+
+cat > "$CDATA_DIR/autonomous-log.jsonl" << 'EOF'
+{"ts":"2025-01-01T00:00:00Z","session":"200","iteration":0,"event":"session_start","cost_usd":0,"detail":"branch=auto/session-200"}
+{"ts":"2025-01-01T00:01:00Z","session":"200","iteration":1,"event":"success","cost_usd":0.10,"detail":"commits=1, elapsed=30s"}
+{"ts":"2025-01-01T00:02:00Z","session":"200","iteration":1,"event":"session_end","cost_usd":0,"detail":"iterations=1, commits=1, duration=60s"}
+EOF
+
+# --no-color should produce no ANSI escapes
+NO_COLOR_OUT=$("$PROJECT_ROOT/scripts/report.sh" "$REPO" --no-color 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$NO_COLOR_OUT" | grep -q $'\033\['; then
+  fail "report.sh --no-color still has ANSI escapes"
+else
+  pass "report.sh --no-color strips ANSI escapes"
+fi
+
+# --color should force ANSI escapes even when piped
+COLOR_OUT=$("$PROJECT_ROOT/scripts/report.sh" "$REPO" --color 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$COLOR_OUT" | grep -q $'\033\['; then
+  pass "report.sh --color forces ANSI escapes"
+else
+  fail "report.sh --color did not produce ANSI escapes"
+fi
+
+# Default (piped) should have no ANSI escapes
+DEFAULT_OUT=$("$PROJECT_ROOT/scripts/report.sh" "$REPO" 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$DEFAULT_OUT" | grep -q $'\033\['; then
+  fail "report.sh default (piped) has ANSI escapes"
+else
+  pass "report.sh default (piped) has no ANSI escapes"
+fi
+
+rm -rf "$CDATA_DIR"
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test: status.sh color flags ─────────────────────────────────
+echo "── test_status_color_flags ──"
+REPO=$(setup_repo)
+SLUG=$(basename "$REPO")
+CDATA_DIR="$HOME/.autonomous-skill/projects/$SLUG"
+mkdir -p "$CDATA_DIR"
+
+cat > "$CDATA_DIR/autonomous-log.jsonl" << 'EOF'
+{"ts":"2025-01-01T00:00:00Z","session":"300","iteration":0,"event":"session_start","cost_usd":0,"detail":"branch=auto/session-300"}
+{"ts":"2025-01-01T00:01:00Z","session":"300","iteration":1,"event":"session_end","cost_usd":0.05,"detail":"iterations=1, commits=0, duration=30s"}
+EOF
+
+# --no-color should produce no ANSI escapes
+NO_COLOR_OUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" --no-color 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$NO_COLOR_OUT" | grep -q $'\033\['; then
+  fail "status.sh --no-color still has ANSI escapes"
+else
+  pass "status.sh --no-color strips ANSI escapes"
+fi
+
+# --color should force ANSI escapes even when piped
+COLOR_OUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" --color 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$COLOR_OUT" | grep -q $'\033\['; then
+  pass "status.sh --color forces ANSI escapes"
+else
+  fail "status.sh --color did not produce ANSI escapes"
+fi
+
+# Default (piped) should have no ANSI escapes
+DEFAULT_OUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$DEFAULT_OUT" | grep -q $'\033\['; then
+  fail "status.sh default (piped) has ANSI escapes"
+else
+  pass "status.sh default (piped) has no ANSI escapes"
+fi
+
+rm -rf "$CDATA_DIR"
+cleanup_repo "$REPO"
+echo ""
+
 # ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════
