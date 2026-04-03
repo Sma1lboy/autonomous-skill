@@ -876,6 +876,141 @@ assert_contains "$OUTPUT" "deploy process" "discover.sh finds TODO in .md"
 cleanup_repo "$REPO"
 echo ""
 
+# ─── Test: status.sh basic output ─────────────────────────────────
+echo "── test_status_basic ──"
+REPO=$(setup_repo)
+
+# Run a session to create a branch and log file
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_REPO="$REPO" \
+  MOCK_CLAUDE_COST=0.50 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" "$REPO" 2>&1)
+
+# Now run status.sh
+STATUS_OUTPUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" 2>&1)
+
+assert_contains "$STATUS_OUTPUT" "AUTONOMOUS STATUS" "status.sh shows header"
+assert_contains "$STATUS_OUTPUT" "Latest Branch" "status.sh shows latest branch section"
+assert_contains "$STATUS_OUTPUT" "auto/session-" "status.sh shows session branch"
+assert_contains "$STATUS_OUTPUT" "ahead of main" "status.sh shows commit count"
+assert_contains "$STATUS_OUTPUT" "Cumulative Stats" "status.sh shows cumulative section"
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test: status.sh JSON output ──────────────────────────────────
+echo "── test_status_json ──"
+REPO=$(setup_repo)
+
+# Run a session
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_REPO="$REPO" \
+  MOCK_CLAUDE_COST=1.25 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" "$REPO" 2>&1)
+
+# Get JSON status
+JSON_OUTPUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" --json 2>&1)
+
+# Validate JSON structure
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$JSON_OUTPUT" | jq -e '.project' >/dev/null 2>&1; then
+  pass "status.sh --json produces valid JSON with project field"
+else
+  fail "status.sh --json invalid JSON"
+fi
+
+TESTS_RUN=$((TESTS_RUN + 1))
+PROJ=$(echo "$JSON_OUTPUT" | jq -r '.project' 2>/dev/null)
+SLUG=$(basename "$REPO")
+if [ "$PROJ" = "$SLUG" ]; then
+  pass "status.sh --json project matches slug"
+else
+  fail "status.sh --json project mismatch (got '$PROJ', expected '$SLUG')"
+fi
+
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$JSON_OUTPUT" | jq -e '.latest_branch | test("auto/session-")' >/dev/null 2>&1; then
+  pass "status.sh --json latest_branch is a session branch"
+else
+  fail "status.sh --json latest_branch missing or wrong"
+fi
+
+TESTS_RUN=$((TESTS_RUN + 1))
+COST=$(echo "$JSON_OUTPUT" | jq -r '.total_cost' 2>/dev/null)
+if echo "$COST" | grep -qE '^[0-9]+(\.[0-9]+)?$'; then
+  pass "status.sh --json total_cost is numeric"
+else
+  fail "status.sh --json total_cost not numeric (got '$COST')"
+fi
+
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$JSON_OUTPUT" | jq -e '.sentinel_active == false' >/dev/null 2>&1; then
+  pass "status.sh --json sentinel_active is false"
+else
+  fail "status.sh --json sentinel_active not false"
+fi
+
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test: status.sh no sessions ──────────────────────────────────
+echo "── test_status_no_sessions ──"
+REPO=$(setup_repo)
+
+STATUS_OUTPUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" 2>&1)
+
+assert_contains "$STATUS_OUTPUT" "AUTONOMOUS STATUS" "status.sh works with no sessions"
+assert_contains "$STATUS_OUTPUT" "No session branches" "status.sh says no branches found"
+assert_contains "$STATUS_OUTPUT" "No log file" "status.sh says no log file"
+
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test: status.sh sentinel detection ───────────────────────────
+echo "── test_status_sentinel ──"
+REPO=$(setup_repo)
+SLUG=$(basename "$REPO")
+SDATA_DIR="$HOME/.autonomous-skill/projects/$SLUG"
+mkdir -p "$SDATA_DIR"
+touch "$SDATA_DIR/.stop-autonomous"
+
+STATUS_OUTPUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" 2>&1)
+
+assert_contains "$STATUS_OUTPUT" "Stop sentinel.*ACTIVE" "status.sh detects sentinel file"
+
+# JSON sentinel check
+JSON_OUTPUT=$(bash "$PROJECT_ROOT/scripts/status.sh" "$REPO" --json 2>&1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if echo "$JSON_OUTPUT" | jq -e '.sentinel_active == true' >/dev/null 2>&1; then
+  pass "status.sh --json sentinel_active is true when sentinel exists"
+else
+  fail "status.sh --json sentinel_active should be true"
+fi
+
+rm -f "$SDATA_DIR/.stop-autonomous"
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test: loop.sh --status flag ──────────────────────────────────
+echo "── test_loop_status_flag ──"
+REPO=$(setup_repo)
+
+STATUS_OUTPUT=$(cd "$REPO" && bash "$LOOP" --status "$REPO" 2>&1)
+assert_contains "$STATUS_OUTPUT" "AUTONOMOUS STATUS" "--status flag invokes status.sh"
+assert_contains "$STATUS_OUTPUT" "No session branches" "--status works on fresh repo"
+
+cleanup_repo "$REPO"
+echo ""
+
 # ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════

@@ -18,6 +18,7 @@ Arguments:
   PROJECT_DIR              Path to git repo (default: current directory)
 
 Options:
+  --status                 Show session status and exit (also: status.sh)
   --dry-run                Show discovered tasks and config, then exit
   --resume [BRANCH]        Continue on an existing session branch instead of
                            creating a new one. If BRANCH is omitted, resumes
@@ -60,6 +61,7 @@ Examples:
   loop.sh --timeout 600 --max-iterations 10 ./repo
   loop.sh --resume                     # continue most recent session
   loop.sh --resume auto/session-12345  # continue specific session
+  loop.sh --status                     # check session status
 EOF
   exit 0
 }
@@ -76,6 +78,7 @@ TIMEOUT_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --help|-h) usage ;;
+    --status) exec "$SCRIPT_DIR/status.sh" "$@" ;;
     --dry-run) DRY_RUN=1; shift ;;
     --resume=*) RESUME_BRANCH="${1#*=}"; shift ;;
     --resume)
