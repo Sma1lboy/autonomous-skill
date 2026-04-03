@@ -423,6 +423,109 @@ rm -rf "$DATA_DIR"
 cleanup_repo "$REPO"
 echo ""
 
+# ─── Test 11: --max-iterations CLI flag ──────────────────────────
+echo "── test_max_iterations_flag ──"
+REPO=$(setup_repo)
+
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_REPO="$REPO" \
+  MOCK_CLAUDE_COST=0.10 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --max-iterations 2 "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "Iterations:.*2" "--max-iterations shows in banner"
+assert_contains "$OUTPUT" "Iteration 1" "ran iteration 1"
+assert_contains "$OUTPUT" "Iteration 2" "ran iteration 2"
+assert_not_contains "$OUTPUT" "Iteration 3" "stopped after 2 iterations"
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test 12: --direction CLI flag ───────────────────────────────
+echo "── test_direction_flag ──"
+REPO=$(setup_repo)
+
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_REPO="$REPO" \
+  MOCK_CLAUDE_COST=0.10 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --direction "Fix all security bugs" "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "Direction:.*Fix all security bugs" "--direction shows in banner"
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test 13: --direction in dry-run ─────────────────────────────
+echo "── test_direction_dry_run ──"
+REPO=$(setup_repo)
+
+OUTPUT=$(cd "$REPO" && bash "$LOOP" --dry-run --direction "Improve test coverage" "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "Direction:.*Improve test coverage" "--direction shows in dry-run banner"
+
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test 14: --max-iterations overrides env var ─────────────────
+echo "── test_max_iterations_overrides_env ──"
+REPO=$(setup_repo)
+
+OUTPUT=$(cd "$REPO" && \
+  MAX_ITERATIONS=99 \
+  bash "$LOOP" --dry-run --max-iterations 3 "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "Iterations:.*3" "--max-iterations overrides MAX_ITERATIONS env var"
+
+cleanup_repo "$REPO"
+echo ""
+
+# ─── Test 15: session branch based off main ──────────────────────
+echo "── test_session_branch_off_main ──"
+REPO=$(setup_repo)
+
+# Create a feature branch with a different commit
+git -C "$REPO" checkout -b feature/something 2>/dev/null
+echo "feature work" > "$REPO/feature.txt"
+git -C "$REPO" add feature.txt
+git -C "$REPO" commit -m "feature work" --no-gpg-sign --quiet 2>/dev/null
+FEATURE_HEAD=$(git -C "$REPO" rev-parse HEAD)
+MAIN_HEAD=$(git -C "$REPO" rev-parse main)
+
+# Run loop from the feature branch — session should branch off main, not feature
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=0 \
+  MOCK_CLAUDE_COST=0.10 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" "$REPO" 2>&1)
+
+# After loop, check that the session branch's parent is main, not feature
+SESSION_BR=$(git -C "$REPO" branch | grep "auto/session" | sed 's/^[* ]*//' | head -1)
+TESTS_RUN=$((TESTS_RUN + 1))
+if [ -n "$SESSION_BR" ]; then
+  SESSION_BASE=$(git -C "$REPO" merge-base "$SESSION_BR" main 2>/dev/null)
+  if [ "$SESSION_BASE" = "$MAIN_HEAD" ]; then
+    pass "session branch based off main (not feature branch)"
+  else
+    fail "session branch not based off main (base=$SESSION_BASE, main=$MAIN_HEAD)"
+  fi
+else
+  fail "no session branch found"
+fi
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
 # ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════

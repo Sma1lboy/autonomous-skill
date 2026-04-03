@@ -4,7 +4,9 @@ Project board for autonomous-skill. Updated by the autonomous agent and maintain
 
 ## Todo
 
-_(nothing — all current items done)_
+- [ ] Add `--resume` flag — continue on an existing session branch
+- [ ] Add `.autonomous-skill.yml` config file support for per-project settings
+- [ ] Add `--help` flag with usage summary
 
 ## Doing
 
@@ -12,9 +14,10 @@ _(nothing in progress)_
 
 ## Done
 
+- [x] Add `--max-iterations` and `--direction` CLI flags (+ 8 new tests, 45 total)
+- [x] Fix session branch to always base off main (regression from refactor)
 - [x] Add test harness — mock CC responses, 37 integration tests for loop.sh, discover.sh, report.sh
 - [x] Implement `scripts/report.sh` — parse autonomous-log.jsonl into human-readable summary
-
 - [x] Add session cost budget (`MAX_COST_USD` + `--max-cost` flag)
 - [x] Add `--dry-run` flag to loop.sh — preview tasks without running
 - [x] Implement TRACE.md — auto-maintained session history

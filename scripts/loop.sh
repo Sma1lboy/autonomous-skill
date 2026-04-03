@@ -11,20 +11,26 @@ DRY_RUN=0
 PROJECT_DIR="."
 
 MAX_COST_ARG=""
+MAX_ITER_ARG=""
+DIRECTION_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --max-cost) MAX_COST_ARG="$2"; shift 2 ;;
     --max-cost=*) MAX_COST_ARG="${1#*=}"; shift ;;
+    --max-iterations) MAX_ITER_ARG="$2"; shift 2 ;;
+    --max-iterations=*) MAX_ITER_ARG="${1#*=}"; shift ;;
+    --direction) DIRECTION_ARG="$2"; shift 2 ;;
+    --direction=*) DIRECTION_ARG="${1#*=}"; shift ;;
     -*) echo "[loop] ERROR: unknown flag: $1" >&2; exit 1 ;;
     *) PROJECT_DIR="$1"; shift ;;
   esac
 done
 
-MAX_ITERATIONS="${MAX_ITERATIONS:-50}"  # 0 = unlimited
+MAX_ITERATIONS="${MAX_ITER_ARG:-${MAX_ITERATIONS:-50}}"  # 0 = unlimited; --max-iterations or env var
 CC_TIMEOUT="${CC_TIMEOUT:-900}"
 MAX_COST_USD="${MAX_COST_ARG:-${MAX_COST_USD:-0}}"  # 0 = unlimited; --max-cost or env var
-DIRECTION="${AUTONOMOUS_DIRECTION:-}"
+DIRECTION="${DIRECTION_ARG:-${AUTONOMOUS_DIRECTION:-}}"
 
 # Paths
 SLUG=$(basename "$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_DIR")")
@@ -190,10 +196,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-# Create session branch
-if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" 2>/dev/null; then
+# Create session branch (always base off main)
+if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
   SESSION_BRANCH="auto/session-${SESSION_ID}-$$"
-  git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" 2>/dev/null
+  git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null
 fi
 
 echo "═══════════════════════════════════════════════════"

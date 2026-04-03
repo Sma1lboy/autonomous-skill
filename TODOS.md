@@ -18,10 +18,20 @@
 - [x] Add KANBAN.md as task source in discover.sh
 - [x] Fix sed regex portability (\\s → POSIX [[:space:]]) in discover.sh
 
-## Open
+## Completed (v0.3)
 - [x] Add `--dry-run` flag to loop.sh — show plan without spawning CC
 - [x] Add session cost budget (`MAX_COST_USD` env var + `--max-cost` flag) to loop.sh
 - [x] Implement `scripts/report.sh` — parse autonomous-log.jsonl into summary
 - [x] Competitive analysis — COMPETITIVE.md comparing SWE-agent, Devin, OpenHands
 - [x] Improve README.md — architecture diagram, usage examples, quickstart
 - [x] Add test harness — mock CC responses for loop.sh integration tests
+- [x] Add `--max-iterations` and `--direction` CLI flags to loop.sh
+- [x] Fix session branch to always base off main (regression from refactor)
+
+## Open
+- [ ] Add `--resume` flag — continue on an existing session branch instead of creating new
+- [ ] Add `.autonomous-skill.yml` config file support for per-project settings
+- [ ] Improve live progress — use tail/offset instead of re-parsing full stream file
+- [ ] Add `--timeout` CLI flag (currently env-var only via `CC_TIMEOUT`)
+- [ ] discover.sh: scan more file types for TODOs (`.tsx`, `.jsx`, `.cpp`, `.c`, `.md`)
+- [ ] Add `--help` flag with usage summary
