@@ -1,0 +1,17 @@
+# Owner Persona
+
+## Priorities (what matters most)
+<!-- What are the most important things for this project? -->
+<!-- Example: ship fast, code quality, test coverage, user experience -->
+
+## Style (code conventions, commit style)
+<!-- How do you write code? What conventions do you follow? -->
+<!-- Example: prefer functional style, short commits, no abbreviations -->
+
+## Avoid (things NOT to change)
+<!-- What should the autonomous agent never touch? -->
+<!-- Example: don't refactor the auth module, don't change the API schema -->
+
+## Current focus (what I'm working on right now)
+<!-- What are you currently working on? This helps the agent prioritize. -->
+<!-- Example: migrating from REST to GraphQL, fixing flaky tests -->
