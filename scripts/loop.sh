@@ -76,9 +76,9 @@ mark_task() {
   local tmp
   tmp=$(mktemp)
   if [ "$status" = "strike" ]; then
-    # Increment strikes
-    jq --arg id "$task_id" '
-      .tasks |= map(if .id == $id then .strikes += 1 | .last_error = "'"$error"'" |
+    # Increment strikes (use --arg for error to avoid jq injection)
+    jq --arg id "$task_id" --arg err "$error" '
+      .tasks |= map(if .id == $id then .strikes += 1 | .last_error = $err |
         (if .strikes >= 3 then .status = "skipped" else . end) else . end) |
       if (.tasks[] | select(.id == $id) | .status) == "skipped" then .skipped += [$id] else . end
     ' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
@@ -297,7 +297,7 @@ while [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null || [ "$ITERATION" -lt "$MAX_ITERAT
   TASK_PROMPT=$(build_prompt "$TASK_DESC" "$TASK_SOURCE")
 
   # Build CC invocation args (stream-json for live progress)
-  CC_ARGS=(-p "$TASK_PROMPT" --permission-mode acceptEdits --output-format stream-json --verbose)
+  CC_ARGS=(-p "$TASK_PROMPT" --permission-mode auto --output-format stream-json --verbose)
   if [ -n "$OWNER_CONTENT" ]; then
     CC_ARGS+=(--append-system-prompt "$OWNER_CONTENT")
   fi

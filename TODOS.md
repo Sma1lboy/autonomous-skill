@@ -1,0 +1,12 @@
+# TODOS
+
+- [ ] Fix operator precedence bug in `detect_test_command` (loop.sh:115) — the `||`/`&&` condition `[ -f pytest.ini ] || [ -f pyproject.toml ] && grep pytest` groups incorrectly; wrap in explicit subshell or use `{}`  so pytest.ini-only projects don't false-positive into the pytest path.
+- [ ] Fix MAIN_BRANCH detection (loop.sh:254) — `git symbolic-ref --short HEAD` captures the current branch, so re-running while on an `auto/` branch uses it as the base; detect the actual main/master branch by checking `git branch` for main or master instead.
+- [ ] Fix `verify_result` (loop.sh:146) to detect untracked files created by CC — `git diff --quiet HEAD` only sees tracked-file changes, so newly created files are silently ignored; use `git status --porcelain` to also catch untracked files.
+- [ ] Register a cleanup trap in loop.sh for SIGTERM/ERR that removes the `CC_STREAM_FILE` temp file so `/tmp/autonomous-cc-*` files don't accumulate on unexpected exits.
+- [ ] Add startup dependency checks in loop.sh for required commands (`jq`, `claude`, `git`, `timeout`) and exit with a clear error message listing which ones are missing.
+- [ ] Fix jq injection in `mark_task` (loop.sh:81) — the error message is interpolated directly into the jq filter string via `'"$error"'`, which breaks or produces wrong JSON when the error contains quotes or backslashes; pass it via `--arg err "$error"` instead.
+- [ ] Add JSON validation of `discover.sh` output in loop.sh before passing it to `init_state` — if discover.sh emits malformed JSON (e.g., from a task description with unescaped characters), the loop crashes with an obscure jq error instead of a clear message.
+- [ ] Log a warning in `verify_result` (loop.sh:159-161) before running `git checkout -- .` and `git clean -fd` on test failure, so the user can see in the log which files were discarded and why, rather than silently destroying changes.
+- [ ] Handle session branch name collision in loop.sh:255 — `git checkout -b "$SESSION_BRANCH"` can fail if two sessions start within the same second, but stderr is redirected to `/dev/null` so the failure is swallowed; check the exit code and append a random suffix on conflict.
+- [ ] Guard `discover.sh` against task descriptions containing control characters or very long lines from code comments — the `head -c 200` truncation can split a multi-byte UTF-8 character, and embedded newlines from multi-line comments can break the JSON array construction in `add_task`.
