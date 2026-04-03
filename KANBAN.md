@@ -4,7 +4,6 @@ Project board for autonomous-skill. Updated by the autonomous agent and maintain
 
 ## Todo
 
-- [ ] Competitive analysis — research SWE-agent, Devin, OpenHands, write COMPETITIVE.md
 - [ ] Improve README.md — architecture diagram, usage examples, quickstart
 - [ ] Add `--dry-run` flag to loop.sh — show what would happen without spawning CC
 - [ ] Add session cost budget (`MAX_COST_USD` env var) to loop.sh
@@ -26,3 +25,4 @@ _(nothing in progress)_
 - [x] OWNER.md persona auto-generation via persona.sh
 - [x] Task discovery from TODOS.md, code TODOs, GitHub issues
 - [x] Support KANBAN.md as a task source in discover.sh
+- [x] Competitive analysis — COMPETITIVE.md (SWE-agent, Devin, OpenHands, Open SWE)
