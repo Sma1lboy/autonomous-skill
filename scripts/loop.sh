@@ -47,9 +47,9 @@ cleanup() {
     rm -f "$CC_STREAM_FILE"
   fi
 }
-trap cleanup EXIT
+trap cleanup EXIT ERR
 trap 'INTERRUPTED=1; echo "[loop] SIGINT received, finishing current task..." >&2' INT
-trap 'echo "[loop] SIGTERM received, exiting..." >&2; exit 143' TERM
+trap 'echo "[loop] SIGTERM received, cleaning up..." >&2; cleanup; exit 143' TERM
 
 # ─── Logging ──────────────────────────────────────────────────────��─
 log_event() {
