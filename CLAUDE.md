@@ -10,6 +10,7 @@ finding and fixing issues in any codebase.
 - `scripts/discover.sh` — Task discovery from TODOS.md, TODO comments, GitHub issues
 - `scripts/persona.sh` — OWNER.md auto-generation from git history + project docs
 - `OWNER.md.template` — Template for manual persona configuration
+- `TRACE.md` — Auto-maintained session history (commits, cost, duration per session)
 
 ## How it works
 
@@ -23,6 +24,7 @@ finding and fixing issues in any codebase.
    - Commits on success, rolls back on failure
    - 3-strike rule: skip task after 3 failures
 5. Logs cost and progress to ~/.autonomous-skill/projects/SLUG/autonomous-log.jsonl
+6. At session end, appends entry to TRACE.md with commits, cost, and duration
 
 ## Safety
 
