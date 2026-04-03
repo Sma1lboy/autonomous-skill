@@ -1,12 +1,27 @@
 # TODOS
 
-- [x] Fix operator precedence bug in `detect_test_command` (loop.sh:115) — the `||`/`&&` condition `[ -f pytest.ini ] || [ -f pyproject.toml ] && grep pytest` groups incorrectly; wrap in explicit subshell or use `{}`  so pytest.ini-only projects don't false-positive into the pytest path.
-- [x] Fix MAIN_BRANCH detection (loop.sh:274) — `git symbolic-ref --short HEAD` captures the current branch, so re-running while on an `auto/` branch uses it as the base; detect the actual main/master branch by checking `git show-ref` for main or master instead.
-- [x] Fix `verify_result` (loop.sh:146) to detect untracked files created by CC — `git diff --quiet HEAD` only sees tracked-file changes, so newly created files are silently ignored; use `git status --porcelain` to also catch untracked files.
-- [x] Register a cleanup trap in loop.sh for SIGTERM/ERR that removes the `CC_STREAM_FILE` temp file so `/tmp/autonomous-cc-*` files don't accumulate on unexpected exits.
-- [x] Add startup dependency checks in loop.sh for required commands (`jq`, `claude`, `git`, `timeout`) and exit with a clear error message listing which ones are missing.
-- [x] Fix jq injection in `mark_task` (loop.sh:81) — the error message is interpolated directly into the jq filter string via `'"$error"'`, which breaks or produces wrong JSON when the error contains quotes or backslashes; pass it via `--arg err "$error"` instead.
-- [x] Add JSON validation of `discover.sh` output in loop.sh before passing it to `init_state` — if discover.sh emits malformed JSON (e.g., from a task description with unescaped characters), the loop crashes with an obscure jq error instead of a clear message.
-- [x] Log a warning in `verify_result` (loop.sh:159-161) before running `git checkout -- .` and `git clean -fd` on test failure, so the user can see in the log which files were discarded and why, rather than silently destroying changes.
-- [x] Handle session branch name collision in loop.sh:331 — `git checkout -b "$SESSION_BRANCH"` can fail if two sessions start within the same second, but stderr is redirected to `/dev/null` so the failure is swallowed; check the exit code and append a random suffix on conflict.
-- [x] Guard `discover.sh` against task descriptions containing control characters or very long lines from code comments — the `head -c 200` truncation can split a multi-byte UTF-8 character, and embedded newlines from multi-line comments can break the JSON array construction in `add_task`.
+## Completed (v0.1)
+- [x] Fix operator precedence bug in `detect_test_command`
+- [x] Fix MAIN_BRANCH detection — detect via show-ref, not current HEAD
+- [x] Fix `verify_result` to detect untracked files
+- [x] Register cleanup trap for SIGTERM/ERR temp files
+- [x] Add startup dependency checks (jq, claude, git)
+- [x] Fix jq injection in `mark_task` — use `--arg`
+- [x] Add JSON validation of discover.sh output
+- [x] Log discarded files before resetting on test failure
+- [x] Handle session branch name collision
+- [x] Guard discover.sh against control chars and UTF-8 truncation
+
+## Completed (v0.2)
+- [x] Implement TRACE.md — auto-maintained session history
+- [x] Implement KANBAN.md — project todo/doing/done board
+- [x] Add KANBAN.md as task source in discover.sh
+- [x] Fix sed regex portability (\\s → POSIX [[:space:]]) in discover.sh
+
+## Open
+- [ ] Add `--dry-run` flag to loop.sh — show plan without spawning CC
+- [ ] Add session cost budget (`MAX_COST_USD` env var) to loop.sh
+- [ ] Implement `scripts/report.sh` — parse autonomous-log.jsonl into summary
+- [ ] Competitive analysis — COMPETITIVE.md comparing SWE-agent, Devin, OpenHands
+- [ ] Improve README.md — architecture diagram, usage examples, quickstart
+- [ ] Add test harness — mock CC responses for loop.sh integration tests
