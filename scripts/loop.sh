@@ -132,7 +132,7 @@ detect_test_command() {
     echo "cd '$dir' && make test"
     return
   fi
-  if [ -f "$dir/pytest.ini" ] || [ -f "$dir/pyproject.toml" ] && grep -q 'pytest' "$dir/pyproject.toml" 2>/dev/null; then
+  if [ -f "$dir/pytest.ini" ] || { [ -f "$dir/pyproject.toml" ] && grep -q 'pytest' "$dir/pyproject.toml" 2>/dev/null; }; then
     echo "cd '$dir' && pytest"
     return
   fi
