@@ -1,8 +1,51 @@
+<div align="center">
+
+![logo](assets/logo.svg)
+
 # autonomous-skill
 
-Self-driving project agent for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
-Drop it into any git repo, invoke `/autonomous-skill`, and it loops — finding tasks,
-fixing code, running tests, committing results — until there's nothing left to do.
+> *"You sleep. It ships."*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-blueviolet)](https://claude.ai/code)
+[![AgentSkills](https://img.shields.io/badge/AgentSkills-Standard-green)](https://agentskills.io)
+[![Bash](https://img.shields.io/badge/Bash-Script-4EAA25?logo=gnu-bash&logoColor=white)](scripts/)
+
+<br>
+
+You close your laptop at midnight. 47 TODOs in your backlog.<br>
+You open it at 8am. 38 of them are done, tested, committed, on a clean branch.<br>
+Total cost: $4.20. No meetings required.<br>
+
+**That's autonomous-skill.**
+
+A self-driving project agent for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+Drop it into any git repo, run `/autonomous-skill`, go to sleep.
+
+[Quickstart](#-quickstart) · [How It Works](#-how-it-works) · [Configuration](#-configuration) · [Safety](#-safety) · [Competitive Analysis](COMPETITIVE.md)
+
+</div>
+
+---
+
+## Quickstart
+
+```bash
+# 1. Clone
+git clone https://github.com/sma1lboy/autonomous-skill.git
+
+# 2. Symlink into Claude Code skills
+ln -s "$(pwd)/autonomous-skill" ~/.claude/skills/autonomous-skill
+
+# 3. In any git repo, open Claude Code and run:
+/autonomous-skill
+```
+
+That's it. It creates an `auto/session-*` branch and starts working.
+
+---
+
+## How It Works
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -12,133 +55,94 @@ fixing code, running tests, committing results — until there's nothing left to
 │  │ persona  │──▶│ discover │──▶│  loop.sh   │  │
 │  │  .sh     │   │  .sh     │   │            │  │
 │  └──────────┘   └──────────┘   │ for each   │  │
-│   OWNER.md       task list     │  task:     │  │
-│   (persona)      (JSON)        │  ┌───────┐ │  │
-│                                │  │claude │ │  │
-│                                │  │  -p   │ │  │
-│                                │  └───┬───┘ │  │
-│                                │      │     │  │
-│                                │  ┌───▼───┐ │  │
-│                                │  │verify │ │  │
-│                                │  │+commit│ │  │
-│                                │  └───────┘ │  │
+│   OWNER.md       task list     │  iteration: │  │
+│   (who you are)  (what to do)  │  ┌───────┐  │  │
+│                                │  │claude │  │  │
+│                                │  │  -p   │  │  │
+│                                │  └───┬───┘  │  │
+│                                │      │      │  │
+│                                │  HEAD moved? │  │
+│                                │  ✓ = success │  │
+│                                │  ✗ = retry   │  │
 │                                └────────────┘  │
 │                                                 │
-│  Outputs: auto/ branch, TRACE.md, log.jsonl    │
+│  Output: auto/ branch + TRACE.md + log.jsonl   │
 └─────────────────────────────────────────────────┘
 ```
 
-## Quickstart
+| Step | What happens |
+|------|-------------|
+| **Persona** | `persona.sh` reads your git history + CLAUDE.md to understand your coding style and priorities. Writes `OWNER.md`. |
+| **Discover** | `discover.sh` scans TODOS.md, code `TODO:` comments, KANBAN.md, and GitHub issues. Outputs a priority-sorted task list. |
+| **Loop** | `loop.sh` creates a session branch, then for each iteration: spawns `claude -p` with your persona + task, watches tool calls in real-time, checks if HEAD moved (= commit = success). |
+| **End** | Prints metrics (duration, commits, cost), appends to TRACE.md, returns to main. |
+
+Each `claude -p` invocation is a **fresh conversation** with full permissions. CC decides what to do: read code, edit files, run tests, commit. loop.sh just checks the result.
+
+---
+
+## Usage
 
 ```bash
-# 1. Clone
-git clone https://github.com/sma1lboy/autonomous-skill.git
-
-# 2. Symlink into Claude Code skills
-ln -s "$(pwd)/autonomous-skill/skill" ~/.claude/skills/autonomous-skill
-
-# 3. Open any git repo in Claude Code and run:
+# Default: 50 iterations
 /autonomous-skill
+
+# Quick test: 3 iterations
+/autonomous-skill 3
+
+# Unlimited: runs until Ctrl+C or no tasks left
+/autonomous-skill unlimited
+
+# With direction: focus the agent on a specific area
+/autonomous-skill fix all auth bugs
+
+# Parallel: run N tasks simultaneously via worktrees
+MAX_ITERATIONS=20 bash scripts/loop.sh --parallel 3 .
 ```
 
-That's it. The agent creates an `auto/session-*` branch and starts working.
-
-## How It Works
-
-**1. Persona generation** — `scripts/persona.sh` checks for `OWNER.md`. If missing,
-it reads `CLAUDE.md`, `README.md`, and git history, then calls Claude to generate a
-persona file describing your priorities, coding style, and current focus. This shapes
-how the agent approaches your project.
-
-**2. Task discovery** — `scripts/discover.sh` scans four sources and outputs a
-priority-sorted JSON array:
-
-| Source | Priority | What it finds |
-|--------|----------|---------------|
-| `TODOS.md` | 3 | Unchecked `- [ ]` items |
-| `KANBAN.md` | 4 | Items in the `## Todo` section |
-| Code comments | 5 | `TODO:`, `FIXME:`, `HACK:` in tracked files |
-| GitHub Issues | 2 | Open issues via `gh issue list` |
-
-If no tasks exist, it creates a bootstrap task to analyze the project and generate a
-`TODOS.md`.
-
-**3. Autonomous loop** — `scripts/loop.sh` creates a session branch and iterates:
-
-```
-for each iteration:
-  1. Build prompt (includes OWNER.md context + iteration number)
-  2. Spawn `claude -p` with --dangerously-skip-permissions + stream-json output
-  3. Show live progress (tool calls printed as they happen)
-  4. On completion:
-     - If HEAD moved → count commits, log success
-     - If HEAD unchanged → log no_change
-  5. Check for interrupt (Ctrl+C) or sentinel file → break
-```
-
-Each `claude -p` invocation gets the full autonomous prompt telling it to: read
-TODOS.md/KANBAN.md, pick ONE task, implement it, run tests, commit or rollback.
-
-**4. Session end** — prints a metrics dashboard and appends an entry to `TRACE.md`:
-
-```
-═══════════════════════════════════════════════════
-  SESSION METRICS
-═══════════════════════════════════════════════════
-  Duration:      47m 12s
-  Iterations:    8
-  Commits:       6
-  Files changed: 12 files
-  Total cost:    $3.42
-  Avg cost/iter: $0.4275
-───────────────────────────────────────────────────
-  Review: git log main..auto/session-1775202019 --oneline
-  Merge:  git checkout main && git merge auto/session-1775202019
-───────────────────────────────────────────────────
-```
+---
 
 ## Configuration
 
-| Env Variable | Default | Description |
-|-------------|---------|-------------|
-| `MAX_ITERATIONS` | `50` | Max loop iterations (0 = unlimited) |
-| `CC_TIMEOUT` | `900` | Timeout per Claude invocation (seconds) |
-| `REFRESH_INTERVAL` | `5` | Re-discover tasks every N iterations |
-| `AUTONOMOUS_DIRECTION` | _(none)_ | Session focus (e.g. "fix auth bugs") |
-| `AUTONOMOUS_SKILL_HOME` | `~/.autonomous-skill` | Data directory for logs |
+| Variable / Flag | Default | Description |
+|----------------|---------|-------------|
+| `MAX_ITERATIONS` / `--max-iterations` | `50` | Max loop iterations (0 = unlimited) |
+| `CC_TIMEOUT` / `--timeout` | `900` | Timeout per CC invocation (seconds) |
+| `AUTONOMOUS_DIRECTION` / `--direction` | _(none)_ | Session focus (e.g. "fix auth bugs") |
+| `MAX_COST_USD` / `--max-cost` | _(none)_ | Stop when total cost exceeds this |
+| `--dry-run` | off | Preview tasks without running CC |
+| `--resume` | off | Continue on existing session branch |
+| `--parallel N` | off | Run N tasks in parallel via worktrees |
+| `--stop` | — | Signal a running session to stop |
 
-Example with custom config:
+Or use `.autonomous-skill.yml` in your project root:
 
-```bash
-MAX_ITERATIONS=10 AUTONOMOUS_DIRECTION="refactor the API layer" /autonomous-skill
+```yaml
+max_iterations: 100
+timeout: 600
+direction: "improve test coverage"
 ```
 
-## Stopping the Agent
+---
+
+## Stopping
 
 | Method | Behavior |
 |--------|----------|
-| **Ctrl+C** | Finishes current iteration, then exits gracefully |
-| **Sentinel file** | `touch ~/.autonomous-skill/projects/SLUG/.stop-autonomous` |
-| **Auto-stop** | Exits when all tasks done or max iterations reached |
+| **Ctrl+C** | Finishes current iteration, then exits |
+| **`--stop`** | Signals running session via sentinel file |
+| **Rate limit** | Auto-detects API limit, stops immediately |
+| **Auto** | Exits when all tasks done or budget hit |
 
-## Session Reports
-
-```bash
-# Human-readable summary of all sessions
-scripts/report.sh .
-
-# Machine-readable JSON (pipe to jq, dashboards, etc.)
-scripts/report.sh . --json
-```
-
-Output includes: session count, total cost, commits, success rate, cost-per-commit,
-per-session breakdown table, and top recurring failures.
+---
 
 ## Reviewing & Merging
 
 ```bash
 # See what the agent did
 git log main..auto/session-TIMESTAMP --oneline
+
+# Detailed diff
 git diff main..auto/session-TIMESTAMP --stat
 
 # Merge if satisfied
@@ -148,37 +152,67 @@ git checkout main && git merge auto/session-TIMESTAMP
 git cherry-pick COMMIT_HASH
 ```
 
+---
+
 ## Project Structure
 
 ```
 autonomous-skill/
 ├── SKILL.md              # Claude Code skill entry point
 ├── CLAUDE.md             # Project instructions for Claude
-├── OWNER.md              # Auto-generated persona (gitignored per project)
-├── OWNER.md.template     # Manual persona template
-├── TRACE.md              # Session history (commits, cost, duration)
-├── KANBAN.md             # Todo/Doing/Done project board
-├── TODOS.md              # Task list with completion tracking
-├── COMPETITIVE.md        # Competitive analysis (SWE-agent, Devin, etc.)
+├── OWNER.md.template     # Persona template
 ├── scripts/
-│   ├── loop.sh           # Main autonomous loop (239 lines)
-│   ├── discover.sh       # Task discovery from 4 sources
-│   ├── report.sh         # Session report from log.jsonl
-│   └── persona.sh        # OWNER.md auto-generation
+│   ├── loop.sh           # Main autonomous loop
+│   ├── discover.sh       # Task discovery (4 sources)
+│   ├── persona.sh        # OWNER.md auto-generation
+│   ├── parallel.sh       # Worktree parallel execution
+│   ├── report.sh         # Session report generator
+│   └── status.sh         # Session status dashboard
+├── tests/
+│   └── test_loop.sh      # Integration tests
 └── README.md
 ```
 
-## Safety Model
+**Generated at runtime** (gitignored):
+- `OWNER.md` — your persona, auto-generated from git + docs
+- `TRACE.md` — session history (commits, cost, duration)
+- `KANBAN.md` — todo/doing/done board
+- `TODOS.md` — task list with completion tracking
 
-- **Branch isolation** — all work happens on `auto/session-*` branches, never `main`
-- **Permission mode** — runs with `--dangerously-skip-permissions` for autonomous
-  operation, but the prompt explicitly forbids destructive workflows
-- **Excluded commands** — `/ship`, `/land-and-deploy`, `/careful`, `/guard` are
-  never invoked
-- **Timeout** — each Claude invocation is capped at 15 minutes (configurable)
-- **3-strike rule** — a task that fails 3 times is skipped
-- **Graceful shutdown** — Ctrl+C and sentinel files allow clean exit
-- **Rollback on failure** — if tests fail, changes are reverted before the next iteration
+---
+
+## Safety
+
+| Guard | How |
+|-------|-----|
+| **Branch isolation** | All work on `auto/session-*` branches. Never touches main. |
+| **Excluded commands** | `/ship`, `/land-and-deploy`, `/careful`, `/guard` are forbidden. |
+| **Timeout** | Each CC invocation capped at 15 min (configurable). |
+| **Rate limit detection** | Auto-stops when API quota is exhausted. |
+| **Graceful shutdown** | Ctrl+C and sentinel files for clean exit. |
+
+---
+
+## Session Metrics
+
+Every session ends with a dashboard:
+
+```
+═══════════════════════════════════════════════════
+  SESSION METRICS
+═══════════════════════════════════════════════════
+  Duration:      47m 12s
+  Iterations:    20
+  Commits:       18
+  Files changed: 13 files
+  Total cost:    $3.42
+  Avg cost/iter: $0.1710
+───────────────────────────────────────────────────
+```
+
+Session history tracked in `TRACE.md`. Run `scripts/report.sh` for analytics.
+
+---
 
 ## License
 
