@@ -62,7 +62,12 @@ update_state() {
   local value="$2"
   local tmp
   tmp=$(mktemp)
-  jq "$field = $value" "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  if ! jq --argjson v "$value" "$field = \$v" "$STATE_FILE" > "$tmp" 2>/dev/null; then
+    echo "[loop] WARNING: update_state failed for $field" >&2
+    rm -f "$tmp"
+    return
+  fi
+  mv "$tmp" "$STATE_FILE"
 }
 
 get_next_task() {
@@ -77,16 +82,24 @@ mark_task() {
   tmp=$(mktemp)
   if [ "$status" = "strike" ]; then
     # Increment strikes (use --arg for error to avoid jq injection)
-    jq --arg id "$task_id" --arg err "$error" '
+    if ! jq --arg id "$task_id" --arg err "$error" '
       .tasks |= map(if .id == $id then .strikes += 1 | .last_error = $err |
         (if .strikes >= 3 then .status = "skipped" else . end) else . end) |
       if (.tasks[] | select(.id == $id) | .status) == "skipped" then .skipped += [$id] else . end
-    ' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    ' "$STATE_FILE" > "$tmp" 2>/dev/null; then
+      echo "[loop] WARNING: mark_task strike failed for $task_id" >&2
+      rm -f "$tmp"; return
+    fi
+    mv "$tmp" "$STATE_FILE"
   elif [ "$status" = "done" ]; then
-    jq --arg id "$task_id" '
+    if ! jq --arg id "$task_id" '
       .tasks |= map(if .id == $id then .status = "done" else . end) |
       .completed += [$id]
-    ' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+    ' "$STATE_FILE" > "$tmp" 2>/dev/null; then
+      echo "[loop] WARNING: mark_task done failed for $task_id" >&2
+      rm -f "$tmp"; return
+    fi
+    mv "$tmp" "$STATE_FILE"
   fi
 }
 
@@ -94,7 +107,12 @@ add_cost() {
   local cost="$1"
   local tmp
   tmp=$(mktemp)
-  jq --argjson c "$cost" '.total_cost_usd += $c' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+  if ! jq --argjson c "$cost" '.total_cost_usd += $c' "$STATE_FILE" > "$tmp" 2>/dev/null; then
+    echo "[loop] WARNING: add_cost failed for cost=$cost" >&2
+    rm -f "$tmp"
+    return
+  fi
+  mv "$tmp" "$STATE_FILE"
 }
 
 # ─── Test command detection ─────────────────────────────────────────
@@ -297,7 +315,7 @@ while [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null || [ "$ITERATION" -lt "$MAX_ITERAT
   TASK_PROMPT=$(build_prompt "$TASK_DESC" "$TASK_SOURCE")
 
   # Build CC invocation args (stream-json for live progress)
-  CC_ARGS=(-p "$TASK_PROMPT" --permission-mode auto --output-format stream-json --verbose)
+  CC_ARGS=(-p "$TASK_PROMPT" --dangerously-skip-permissions --output-format stream-json --verbose)
   if [ -n "$OWNER_CONTENT" ]; then
     CC_ARGS+=(--append-system-prompt "$OWNER_CONTENT")
   fi
