@@ -526,6 +526,48 @@ rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
 cleanup_repo "$REPO"
 echo ""
 
+# ── test_help_flag ──────────────────────────────────────────────────
+echo "── test_help_flag ──"
+
+OUTPUT=$(bash "$LOOP" --help 2>&1)
+assert_contains "$OUTPUT" "Usage: loop.sh" "--help shows usage header"
+assert_contains "$OUTPUT" "dry-run" "--help lists --dry-run"
+assert_contains "$OUTPUT" "max-iterations" "--help lists --max-iterations"
+assert_contains "$OUTPUT" "max-cost" "--help lists --max-cost"
+assert_contains "$OUTPUT" "direction" "--help lists --direction"
+assert_contains "$OUTPUT" "timeout" "--help lists --timeout"
+assert_contains "$OUTPUT" "Examples:" "--help shows examples section"
+
+OUTPUT_H=$(bash "$LOOP" -h 2>&1)
+assert_contains "$OUTPUT_H" "Usage: loop.sh" "-h also shows usage"
+echo ""
+
+# ── test_unknown_flag_error ─────────────────────────────────────────
+echo "── test_unknown_flag_error ──"
+
+OUTPUT=$(bash "$LOOP" --bogus 2>&1 || true)
+assert_contains "$OUTPUT" "unknown flag" "unknown flag shows error"
+assert_contains "$OUTPUT" "help" "unknown flag suggests --help"
+echo ""
+
+# ── test_timeout_flag ────────────────────────────────────────────────
+echo "── test_timeout_flag ──"
+
+REPO=$(setup_repo)
+OUTPUT=$(cd "$REPO" && \
+  MOCK_CLAUDE_COMMIT=1 \
+  MOCK_CLAUDE_COST=0.05 \
+  MAX_ITERATIONS=1 \
+  PATH="$SCRIPT_DIR:$PATH" \
+  bash "$LOOP" --timeout 120 "$REPO" 2>&1)
+
+assert_contains "$OUTPUT" "Timeout:.*120s" "--timeout shows in banner"
+
+SLUG=$(basename "$REPO")
+rm -f "$HOME/.autonomous-skill/projects/$SLUG/autonomous-log.jsonl"
+cleanup_repo "$REPO"
+echo ""
+
 # ═══════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═══════════════════════════════════════════════════════════════════

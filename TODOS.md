@@ -28,10 +28,13 @@
 - [x] Add `--max-iterations` and `--direction` CLI flags to loop.sh
 - [x] Fix session branch to always base off main (regression from refactor)
 
+## Completed (v0.4)
+- [x] Add `--help` flag with usage summary (+ `-h` shorthand)
+- [x] Add `--timeout` CLI flag (was env-var only via `CC_TIMEOUT`)
+- [x] Improve unknown flag error to suggest `--help`
+
 ## Open
 - [ ] Add `--resume` flag — continue on an existing session branch instead of creating new
 - [ ] Add `.autonomous-skill.yml` config file support for per-project settings
 - [ ] Improve live progress — use tail/offset instead of re-parsing full stream file
-- [ ] Add `--timeout` CLI flag (currently env-var only via `CC_TIMEOUT`)
 - [ ] discover.sh: scan more file types for TODOs (`.tsx`, `.jsx`, `.cpp`, `.c`, `.md`)
-- [ ] Add `--help` flag with usage summary

@@ -6,6 +6,50 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ─── Usage ─────────────────────────────────────────────────────────
+usage() {
+  cat << 'EOF'
+Usage: loop.sh [OPTIONS] [PROJECT_DIR]
+
+Self-driving project agent. Runs in a loop, autonomously finding and
+fixing issues in a git repository.
+
+Arguments:
+  PROJECT_DIR              Path to git repo (default: current directory)
+
+Options:
+  --dry-run                Show discovered tasks and config, then exit
+  --max-iterations N       Max loop iterations (default: 50, 0=unlimited)
+  --max-cost N             Session cost budget in USD (default: unlimited)
+  --direction TEXT         Focus prompt — tells the agent what to work on
+  --timeout N              Seconds per CC invocation (default: 900)
+  --help                   Show this help message
+
+Environment variables:
+  MAX_ITERATIONS           Same as --max-iterations (flag takes precedence)
+  MAX_COST_USD             Same as --max-cost (flag takes precedence)
+  CC_TIMEOUT               Same as --timeout (flag takes precedence)
+  AUTONOMOUS_DIRECTION     Same as --direction (flag takes precedence)
+  AUTONOMOUS_SKILL_HOME    Data directory (default: ~/.autonomous-skill)
+
+Safety:
+  - All changes go on auto/session-* branches (never main)
+  - CC runs with --dangerously-skip-permissions
+  - 3-strike rule: tasks that fail 3 times are skipped
+  - Ctrl-C finishes current iteration, then stops gracefully
+  - Create a .stop-autonomous sentinel file to stop remotely
+
+Examples:
+  loop.sh                              # run in current dir, defaults
+  loop.sh --dry-run ./my-project       # preview tasks without running
+  loop.sh --max-iterations 5           # cap at 5 iterations
+  loop.sh --max-cost 2.00              # stop after $2 spent
+  loop.sh --direction "fix all linting errors" ./repo
+  loop.sh --timeout 600 --max-iterations 10 ./repo
+EOF
+  exit 0
+}
+
 # ─── Argument parsing ──────────────────────────────────────────────
 DRY_RUN=0
 PROJECT_DIR="."
@@ -13,8 +57,10 @@ PROJECT_DIR="."
 MAX_COST_ARG=""
 MAX_ITER_ARG=""
 DIRECTION_ARG=""
+TIMEOUT_ARG=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --help|-h) usage ;;
     --dry-run) DRY_RUN=1; shift ;;
     --max-cost) MAX_COST_ARG="$2"; shift 2 ;;
     --max-cost=*) MAX_COST_ARG="${1#*=}"; shift ;;
@@ -22,13 +68,15 @@ while [ $# -gt 0 ]; do
     --max-iterations=*) MAX_ITER_ARG="${1#*=}"; shift ;;
     --direction) DIRECTION_ARG="$2"; shift 2 ;;
     --direction=*) DIRECTION_ARG="${1#*=}"; shift ;;
-    -*) echo "[loop] ERROR: unknown flag: $1" >&2; exit 1 ;;
+    --timeout) TIMEOUT_ARG="$2"; shift 2 ;;
+    --timeout=*) TIMEOUT_ARG="${1#*=}"; shift ;;
+    -*) echo "[loop] ERROR: unknown flag: $1" >&2; echo "Run 'loop.sh --help' for usage." >&2; exit 1 ;;
     *) PROJECT_DIR="$1"; shift ;;
   esac
 done
 
 MAX_ITERATIONS="${MAX_ITER_ARG:-${MAX_ITERATIONS:-50}}"  # 0 = unlimited; --max-iterations or env var
-CC_TIMEOUT="${CC_TIMEOUT:-900}"
+CC_TIMEOUT="${TIMEOUT_ARG:-${CC_TIMEOUT:-900}}"  # --timeout or env var
 MAX_COST_USD="${MAX_COST_ARG:-${MAX_COST_USD:-0}}"  # 0 = unlimited; --max-cost or env var
 DIRECTION="${DIRECTION_ARG:-${AUTONOMOUS_DIRECTION:-}}"
 

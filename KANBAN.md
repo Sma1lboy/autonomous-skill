@@ -6,13 +6,16 @@ Project board for autonomous-skill. Updated by the autonomous agent and maintain
 
 - [ ] Add `--resume` flag — continue on an existing session branch
 - [ ] Add `.autonomous-skill.yml` config file support for per-project settings
-- [ ] Add `--help` flag with usage summary
+- [ ] Improve live progress — use tail/offset instead of re-parsing full stream file
+- [ ] discover.sh: scan more file types for TODOs (`.tsx`, `.jsx`, `.cpp`, `.c`, `.md`)
 
 ## Doing
 
 _(nothing in progress)_
 
 ## Done
+
+- [x] Add `--help`/`-h` flag + `--timeout` CLI flag + better error messages (11 new tests, 56 total)
 
 - [x] Add `--max-iterations` and `--direction` CLI flags (+ 8 new tests, 45 total)
 - [x] Fix session branch to always base off main (regression from refactor)
