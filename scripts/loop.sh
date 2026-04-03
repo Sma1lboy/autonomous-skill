@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
-# loop.sh — Main autonomous loop driver
-# Drives iterations by spawning fresh CC invocations, managing state, and handling cleanup.
+# loop.sh — Thin harness for autonomous CC iterations.
+# All intelligence lives in CC's prompt. This script only handles:
+# branching, spawning, timeout, cost logging, and interrupt handling.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${1:-.}"
 MAX_ITERATIONS="${MAX_ITERATIONS:-50}"  # 0 = unlimited
 CC_TIMEOUT="${CC_TIMEOUT:-900}"
-REFRESH_INTERVAL="${REFRESH_INTERVAL:-5}"
 DIRECTION="${AUTONOMOUS_DIRECTION:-}"
 
-# Derive SLUG and paths — self-contained, no gstack dependency
+# Paths
 SLUG=$(basename "$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_DIR")")
 DATA_DIR="${AUTONOMOUS_SKILL_HOME:-$HOME/.autonomous-skill}/projects/$SLUG"
-STATE_FILE="$DATA_DIR/autonomous-state.json"
 LOG_FILE="$DATA_DIR/autonomous-log.jsonl"
 SENTINEL_FILE="$DATA_DIR/.stop-autonomous"
 OWNER_FILE="$PROJECT_DIR/OWNER.md"
@@ -22,587 +21,219 @@ SESSION_BRANCH="auto/session-$SESSION_ID"
 
 mkdir -p "$DATA_DIR"
 
-# Excluded workflows (dangerous in autonomous mode)
-EXCLUDED_WORKFLOWS="/ship /land-and-deploy /careful /guard"
-
-# ─── Dependency checks ────────────────────────────────────────────
-MISSING_DEPS=""
-for dep in jq claude git timeout; do
-  if ! command -v "$dep" >/dev/null 2>&1; then
-    MISSING_DEPS="${MISSING_DEPS:+$MISSING_DEPS, }$dep"
-  fi
+# ─── Dependency check ───────────────────────────────────────────────
+for dep in jq claude git; do
+  command -v "$dep" >/dev/null 2>&1 || { echo "[loop] ERROR: $dep not found" >&2; exit 1; }
 done
-if [ -n "$MISSING_DEPS" ]; then
-  echo "[loop] ERROR: Missing required commands: $MISSING_DEPS" >&2
-  echo "[loop] Install them and try again." >&2
-  exit 1
-fi
 
-# ─── Signal handling & cleanup ──────────────────────────────────────
+# ─── Signal handling ────────────────────────────────────────────────
 INTERRUPTED=0
-CC_STREAM_FILE=""  # Initialized here so cleanup trap can access it
+trap 'INTERRUPTED=1; echo "" ; echo "[loop] SIGINT — finishing current iteration..." >&2' INT
+CC_STREAM_FILE=""
+trap 'rm -f "$CC_STREAM_FILE" 2>/dev/null' EXIT
 
-cleanup() {
-  if [ -n "$CC_STREAM_FILE" ] && [ -f "$CC_STREAM_FILE" ]; then
-    rm -f "$CC_STREAM_FILE"
-  fi
-}
-# EXIT covers all script terminations (normal, set -u errors, exit calls).
-# Do NOT trap ERR here — without set -e, ERR fires on every failed command
-# (e.g., wait returning CC's non-zero exit code), which would prematurely
-# delete CC_STREAM_FILE while the main loop still needs it.
-trap cleanup EXIT
-trap 'INTERRUPTED=1; echo "[loop] SIGINT received, finishing current task..." >&2' INT
-trap 'echo "[loop] SIGTERM received, cleaning up..." >&2; cleanup; exit 143' TERM
-
-# ─── Logging ──────────────────────────────────────────────────────��─
+# ─── Logging ────────────────────────────────────────────────────────
 log_event() {
-  local event="$1"
-  local details="${2:-}"
-  local cost="${3:-0}"
-  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"session\":\"$SESSION_ID\",\"iteration\":${ITERATION:-0},\"event\":\"$event\",\"details\":$(echo "$details" | jq -Rs .),\"cost_usd\":$cost}" >> "$LOG_FILE"
+  local event="$1" cost="${2:-0}" detail="${3:-}"
+  echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"session\":\"$SESSION_ID\",\"iteration\":${ITERATION:-0},\"event\":\"$event\",\"cost_usd\":$cost,\"detail\":$(printf '%s' "$detail" | jq -Rs .)}" >> "$LOG_FILE"
 }
 
-# ─── State management ───────────────────────────────────────────────
-init_state() {
-  local tasks="$1"
-  jq -n \
-    --arg sid "$SESSION_ID" \
-    --arg branch "$SESSION_BRANCH" \
-    --argjson max "$MAX_ITERATIONS" \
-    --argjson tasks "$tasks" \
-    '{
-      session_id: $sid,
-      branch: $branch,
-      iteration: 0,
-      max_iterations: $max,
-      total_cost_usd: 0,
-      tasks: $tasks,
-      completed: [],
-      skipped: []
-    }' > "$STATE_FILE"
-}
+# ─── Owner persona ──────────────────────────────────────────────────
+if [ ! -f "$OWNER_FILE" ]; then
+  "$SCRIPT_DIR/persona.sh" "$PROJECT_DIR" >/dev/null 2>&1
+fi
+OWNER_CONTENT=""
+[ -f "$OWNER_FILE" ] && OWNER_CONTENT=$(cat "$OWNER_FILE")
 
-update_state() {
-  local field="$1"
-  local value="$2"
-  local tmp
-  tmp=$(mktemp)
-  if ! jq --argjson v "$value" "$field = \$v" "$STATE_FILE" > "$tmp" 2>/dev/null; then
-    echo "[loop] WARNING: update_state failed for $field" >&2
-    rm -f "$tmp"
-    return
-  fi
-  mv "$tmp" "$STATE_FILE"
-}
-
-get_next_task() {
-  jq -r '[.tasks[] | select(.status == "pending")] | sort_by(.priority) | .[0] // empty' "$STATE_FILE"
-}
-
-mark_task() {
-  local task_id="$1"
-  local status="$2"
-  local error="${3:-null}"
-  local tmp
-  tmp=$(mktemp)
-  if [ "$status" = "strike" ]; then
-    # Increment strikes (use --arg for error to avoid jq injection)
-    if ! jq --arg id "$task_id" --arg err "$error" '
-      .tasks |= map(if .id == $id then .strikes += 1 | .last_error = $err |
-        (if .strikes >= 3 then .status = "skipped" else . end) else . end) |
-      if (.tasks[] | select(.id == $id) | .status) == "skipped" then .skipped += [$id] else . end
-    ' "$STATE_FILE" > "$tmp" 2>/dev/null; then
-      echo "[loop] WARNING: mark_task strike failed for $task_id" >&2
-      rm -f "$tmp"; return
-    fi
-    mv "$tmp" "$STATE_FILE"
-  elif [ "$status" = "done" ]; then
-    if ! jq --arg id "$task_id" '
-      .tasks |= map(if .id == $id then .status = "done" else . end) |
-      .completed += [$id]
-    ' "$STATE_FILE" > "$tmp" 2>/dev/null; then
-      echo "[loop] WARNING: mark_task done failed for $task_id" >&2
-      rm -f "$tmp"; return
-    fi
-    mv "$tmp" "$STATE_FILE"
-  fi
-}
-
-add_cost() {
-  local raw_cost="$1"
-  # Extract first valid number, strip everything else
-  local cost
-  cost=$(echo "$raw_cost" | grep -oE '^[0-9]+(\.[0-9]+)?' | head -1)
-  if [ -z "$cost" ]; then cost="0"; fi
-  local tmp
-  tmp=$(mktemp)
-  if ! jq --argjson c "$cost" '.total_cost_usd += $c' "$STATE_FILE" > "$tmp" 2>/dev/null; then
-    echo "[loop] WARNING: add_cost failed (raw=$raw_cost, parsed=$cost)" >&2
-    rm -f "$tmp"
-    return
-  fi
-  mv "$tmp" "$STATE_FILE"
-}
-
-# ─── Test command detection ─────────────────────────────────────────
-detect_test_command() {
-  local dir="$1"
-  if [ -f "$dir/package.json" ]; then
-    local test_script
-    test_script=$(jq -r '.scripts.test // empty' "$dir/package.json" 2>/dev/null)
-    if [ -n "$test_script" ] && [ "$test_script" != "echo \"Error: no test specified\" && exit 1" ]; then
-      echo "cd '$dir' && npm test"
-      return
-    fi
-  fi
-  if [ -f "$dir/Makefile" ] && grep -q '^test:' "$dir/Makefile" 2>/dev/null; then
-    echo "cd '$dir' && make test"
-    return
-  fi
-  if [ -f "$dir/pytest.ini" ] || { [ -f "$dir/pyproject.toml" ] && grep -q 'pytest' "$dir/pyproject.toml" 2>/dev/null; }; then
-    echo "cd '$dir' && pytest"
-    return
-  fi
-  if [ -f "$dir/Cargo.toml" ]; then
-    echo "cd '$dir' && cargo test"
-    return
-  fi
-  # No test command found
-  echo ""
-}
-
-# ─── Verify result ──────────────────────────────────────────────────
-verify_result() {
-  local cc_output="$1"
-  local task_desc="$2"
-  local head_before="$3"
-
-  # Parse JSON
-  local is_error
-  is_error=$(echo "$cc_output" | jq -r '.is_error // true' 2>/dev/null)
-  local cost
-  cost=$(echo "$cc_output" | jq -r '.total_cost_usd // 0' 2>/dev/null)
-
-  if [ "$is_error" = "true" ]; then
-    local error_msg
-    error_msg=$(echo "$cc_output" | jq -r '.result // .errors[0] // "unknown error"' 2>/dev/null)
-    echo "error:$cost:$error_msg"
-    return 1
-  fi
-
-  # Check if CC made its own commits (HEAD moved)
-  local head_after
-  head_after=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null)
-  if [ -n "$head_before" ] && [ "$head_before" != "$head_after" ]; then
-    local cc_commits
-    cc_commits=$(git -C "$PROJECT_DIR" rev-list --count "$head_before..$head_after" 2>/dev/null || echo 0)
-    echo "pass:$cost:CC committed ($cc_commits commit(s))"
-    return 0
-  fi
-
-  # Check if there are uncommitted changes (tracked modifications OR untracked files)
-  local has_changes=0
-  if ! git -C "$PROJECT_DIR" diff --quiet HEAD 2>/dev/null; then
-    has_changes=1
-  elif [ -n "$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null)" ]; then
-    has_changes=1
-  fi
-  if [ "$has_changes" -eq 1 ]; then
-    # There are changes — run tests if available
-    local test_cmd
-    test_cmd=$(detect_test_command "$PROJECT_DIR")
-
-    if [ -n "$test_cmd" ]; then
-      if eval "$test_cmd" >/dev/null 2>&1; then
-        # Tests pass — commit
-        git -C "$PROJECT_DIR" add -A
-        git -C "$PROJECT_DIR" commit -m "auto: $task_desc" --no-verify >/dev/null 2>&1
-        echo "pass:$cost:committed"
-        return 0
-      else
-        # Tests fail — log what will be discarded, then reset
-        echo "[verify] Tests failed — discarding changes:" >&2
-        git -C "$PROJECT_DIR" diff --stat HEAD 2>/dev/null >&2
-        local untracked
-        untracked=$(git -C "$PROJECT_DIR" ls-files --others --exclude-standard 2>/dev/null)
-        if [ -n "$untracked" ]; then
-          echo "[verify] Untracked files to be removed:" >&2
-          echo "$untracked" | sed 's/^/  /' >&2
-        fi
-        git -C "$PROJECT_DIR" checkout -- . 2>/dev/null
-        git -C "$PROJECT_DIR" clean -fd >/dev/null 2>&1
-        echo "fail:$cost:tests failed"
-        return 1
-      fi
-    else
-      # No tests — accept the change
-      git -C "$PROJECT_DIR" add -A
-      git -C "$PROJECT_DIR" commit -m "auto: $task_desc" --no-verify >/dev/null 2>&1
-      echo "pass:$cost:committed (no tests)"
-      return 0
-    fi
-  else
-    # No code changes — CC may have only done analysis
-    echo "pass:$cost:no changes (analysis only)"
-    return 0
-  fi
-}
-
-# ─── Build task prompt ──────────────────────────────────────────────
+# ─── Build the autonomous prompt ────────────────────────────────────
 build_prompt() {
-  local task_desc="$1"
-  local task_source="$2"
+  local iter="$1" max="$2"
 
-  local direction_line=""
+  cat << 'PROMPT'
+You are an autonomous project agent. You have FULL permissions to read, write, edit,
+and run commands in this project.
+
+YOUR WORKFLOW (every iteration):
+1. Assess: Read TODOS.md, KANBAN.md, recent git log. Understand what's been done and what's next.
+2. Pick ONE task — the highest-impact thing you can do right now.
+3. Implement it. Read the relevant code, make the fix or improvement.
+4. Verify: Run tests if they exist (check package.json scripts.test, Makefile, pytest, cargo test).
+5. If tests pass (or no tests exist): git add + git commit with a clear message.
+   If tests fail: revert your changes (git checkout -- .), log why, pick a different task.
+6. Update TODOS.md: mark completed items [x], add new issues you discovered.
+
+RULES:
+- ONE task per iteration. Small, focused commits.
+- ALWAYS commit your work if it's correct. Don't leave uncommitted changes.
+- NEVER invoke /ship, /land-and-deploy, /careful, /guard.
+- If you can't make progress on a task after 2 attempts, skip it and try something else.
+- If you find bugs in the project, add them to TODOS.md and fix the most critical one.
+PROMPT
+
   if [ -n "$DIRECTION" ]; then
-    direction_line="SESSION DIRECTION: $DIRECTION
-Focus your work on this direction. If the task doesn't align, adapt it to fit.
-
-"
+    echo ""
+    echo "SESSION DIRECTION: $DIRECTION"
+    echo "Focus your work on this. Adapt tasks to fit this direction."
   fi
 
-  cat << PROMPT
-You are an autonomous project agent working on this codebase.
-
-${direction_line}YOUR TASK: $task_desc
-(Source: $task_source)
-
-INSTRUCTIONS:
-1. Understand the task by reading relevant files.
-2. Implement the fix or improvement.
-3. Make sure your changes are correct and complete.
-4. Do not create new files unless necessary.
-5. Keep changes minimal and focused on the task.
-PROMPT
+  echo ""
+  echo "This is iteration $iter$([ "$max" -gt 0 ] && echo " of $max" || echo " (unlimited)")."
 }
-
-# ─── Autonomous system prompt ───────────────────────────────────────
-AUTONOMOUS_PROMPT="AUTONOMOUS MODE: You are an autonomous project agent.
-RULES:
-1. When any workflow asks a question via AskUserQuestion, automatically select the recommended option. Never wait for user input.
-2. NEVER invoke these workflows: $EXCLUDED_WORKFLOWS
-3. If a dangerous operation is needed, SKIP IT. Do not delete files, force push, or deploy.
-4. All code changes go to the current branch. Commit with descriptive messages.
-5. Follow the owner persona for style and priority decisions.
-6. Be efficient. Focus on one task at a time. Make minimal, correct changes."
 
 # ═══════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════
 
-echo "═══════════════════════════════════════════════════"
-echo "  Autonomous Skill — Session $SESSION_ID"
-echo "  Project: $PROJECT_DIR"
-if [ -n "$DIRECTION" ]; then echo "  Direction: $DIRECTION"; fi
-if [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null; then echo "  Max iterations: unlimited"; else echo "  Max iterations: $MAX_ITERATIONS"; fi
-echo "  Timeout per iteration: ${CC_TIMEOUT}s"
-echo "═══════════════════════════════════════════════════"
+# Verify git repo
+git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1 || { echo "[loop] ERROR: not a git repo" >&2; exit 1; }
 
-# Ensure we're in a git repo
-if ! git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-  echo "[loop] ERROR: $PROJECT_DIR is not a git repository" >&2
-  exit 1
+# Detect main branch
+MAIN_BRANCH=$(git -C "$PROJECT_DIR" show-ref --verify --quiet refs/heads/main 2>/dev/null && echo "main" || echo "master")
+if ! git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$MAIN_BRANCH" 2>/dev/null; then
+  MAIN_BRANCH=$(git -C "$PROJECT_DIR" symbolic-ref --short HEAD 2>/dev/null || echo "main")
 fi
-
-# Ensure OWNER.md exists
-"$SCRIPT_DIR/persona.sh" "$PROJECT_DIR" >/dev/null
-
-# Read OWNER.md
-OWNER_CONTENT=""
-if [ -f "$OWNER_FILE" ]; then
-  OWNER_CONTENT=$(cat "$OWNER_FILE")
-fi
-
-# Discover tasks
-echo "[loop] Discovering tasks..."
-TASKS=$("$SCRIPT_DIR/discover.sh" "$PROJECT_DIR")
-
-# Validate discover.sh output is well-formed JSON array
-if ! echo "$TASKS" | jq empty 2>/dev/null; then
-  echo "[loop] ERROR: discover.sh produced invalid JSON. Raw output:" >&2
-  echo "$TASKS" | head -20 >&2
-  exit 1
-fi
-if ! echo "$TASKS" | jq -e 'type == "array"' >/dev/null 2>&1; then
-  echo "[loop] ERROR: discover.sh output is valid JSON but not an array (got $(echo "$TASKS" | jq -r 'type'))" >&2
-  exit 1
-fi
-
-TASK_COUNT=$(echo "$TASKS" | jq 'length')
-echo "[loop] Found $TASK_COUNT tasks"
-
-# Initialize state
-init_state "$TASKS"
 
 # Create session branch
-# Detect the actual main branch (not the current branch, which may be auto/*)
-if git -C "$PROJECT_DIR" show-ref --verify --quiet refs/heads/main 2>/dev/null; then
-  MAIN_BRANCH="main"
-elif git -C "$PROJECT_DIR" show-ref --verify --quiet refs/heads/master 2>/dev/null; then
-  MAIN_BRANCH="master"
-else
-  # Fallback: use the first non-auto branch, or default to "main"
-  MAIN_BRANCH=$(git -C "$PROJECT_DIR" branch --format='%(refname:short)' 2>/dev/null | grep -v '^auto/' | head -1)
-  MAIN_BRANCH="${MAIN_BRANCH:-main}"
+if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" 2>/dev/null; then
+  SESSION_BRANCH="auto/session-${SESSION_ID}-$$"
+  git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" 2>/dev/null
 fi
-if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
-  # Branch name collision (e.g., two sessions started in the same second) — append random suffix
-  SESSION_BRANCH="${SESSION_BRANCH}-$(head -c 4 /dev/urandom | od -An -tx1 | tr -d ' ')"
-  if ! git -C "$PROJECT_DIR" checkout -b "$SESSION_BRANCH" "$MAIN_BRANCH" 2>/dev/null; then
-    echo "[loop] ERROR: Failed to create session branch $SESSION_BRANCH" >&2
-    exit 1
-  fi
-fi
-echo "[loop] Created branch: $SESSION_BRANCH"
 
-log_event "session_start" "tasks=$TASK_COUNT, branch=$SESSION_BRANCH"
+echo "═══════════════════════════════════════════════════"
+echo "  Autonomous Skill — Session $SESSION_ID"
+echo "  Project: $(basename "$PROJECT_DIR")"
+[ -n "$DIRECTION" ] && echo "  Direction: $DIRECTION"
+[ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null && echo "  Iterations: unlimited" || echo "  Iterations: $MAX_ITERATIONS"
+echo "  Timeout: ${CC_TIMEOUT}s per iteration"
+echo "  Branch: $SESSION_BRANCH"
+echo "═══════════════════════════════════════════════════"
+echo ""
+
+log_event "session_start" 0 "branch=$SESSION_BRANCH"
 
 # ─── Main loop ──────────────────────────────────────────────────────
 ITERATION=0
+TOTAL_COST=0
+TOTAL_COMMITS=0
+
 while [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null || [ "$ITERATION" -lt "$MAX_ITERATIONS" ]; do
-  # Check for interrupts
-  if [ "$INTERRUPTED" -eq 1 ]; then
-    echo "[loop] Interrupted. Cleaning up..."
-    break
-  fi
+  # Interrupts & sentinel
+  [ "$INTERRUPTED" -eq 1 ] && break
+  [ -f "$SENTINEL_FILE" ] && { rm -f "$SENTINEL_FILE"; echo "[loop] Sentinel file detected. Stopping."; break; }
 
-  # Check sentinel file
-  if [ -f "$SENTINEL_FILE" ]; then
-    echo "[loop] Sentinel file detected. Stopping..."
-    rm -f "$SENTINEL_FILE"
-    break
-  fi
+  ITERATION=$((ITERATION + 1))
+  [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null && echo "─── Iteration $ITERATION ───" || echo "─── Iteration $ITERATION/$MAX_ITERATIONS ───"
 
-  # Update iteration in state
-  update_state '.iteration' "$ITERATION"
-
-  # Get next task
-  TASK_JSON=$(get_next_task)
-  if [ -z "$TASK_JSON" ] || [ "$TASK_JSON" = "null" ]; then
-    echo "[loop] No more pending tasks. Exiting."
-    break
-  fi
-
-  TASK_ID=$(echo "$TASK_JSON" | jq -r '.id')
-  TASK_DESC=$(echo "$TASK_JSON" | jq -r '.description')
-  TASK_SOURCE=$(echo "$TASK_JSON" | jq -r '.source')
-  TASK_STRIKES=$(echo "$TASK_JSON" | jq -r '.strikes')
-
-  echo ""
-  if [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null; then echo "─── Iteration $((ITERATION + 1)) ───"; else echo "─── Iteration $((ITERATION + 1))/$MAX_ITERATIONS ───"; fi
-  echo "Task: $TASK_DESC"
-  echo "Source: $TASK_SOURCE (strikes: $TASK_STRIKES)"
-
-  # Build the prompt
-  TASK_PROMPT=$(build_prompt "$TASK_DESC" "$TASK_SOURCE")
-
-  # Build CC invocation args (stream-json for live progress)
-  CC_ARGS=(-p "$TASK_PROMPT" --dangerously-skip-permissions --output-format stream-json --verbose)
-  if [ -n "$OWNER_CONTENT" ]; then
-    CC_ARGS+=(--append-system-prompt "$OWNER_CONTENT")
-  fi
-  CC_ARGS+=(--append-system-prompt "$AUTONOMOUS_PROMPT")
-
-  # Run CC with timeout, streaming progress to stderr
-  # Record HEAD before CC runs — CC might commit on its own
+  # Snapshot HEAD
   HEAD_BEFORE=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null)
 
-  echo "[loop] Running CC... (timeout: ${CC_TIMEOUT}s)"
+  # Build prompt
+  TASK_PROMPT=$(build_prompt "$ITERATION" "$MAX_ITERATIONS")
+
+  # Build CC args
+  CC_ARGS=(-p "$TASK_PROMPT" --dangerously-skip-permissions --output-format stream-json --verbose)
+  [ -n "$OWNER_CONTENT" ] && CC_ARGS+=(--append-system-prompt "$OWNER_CONTENT")
+
+  # Spawn CC
+  echo "[loop] CC running..."
   CC_START=$(date +%s)
   CC_STREAM_FILE=$(mktemp /tmp/autonomous-cc-XXXXXXXX)
-  mv "$CC_STREAM_FILE" "${CC_STREAM_FILE}.jsonl"
-  CC_STREAM_FILE="${CC_STREAM_FILE}.jsonl"
+  mv "$CC_STREAM_FILE" "${CC_STREAM_FILE}.jsonl"; CC_STREAM_FILE="${CC_STREAM_FILE}.jsonl"
+  LAST_TOOL=""
 
   timeout "$CC_TIMEOUT" claude "${CC_ARGS[@]}" < /dev/null > "$CC_STREAM_FILE" 2>/dev/null &
   CC_PID=$!
-  LAST_TOOL=""
 
-  # Live progress: tail the stream and print tool uses + text
+  # Live progress
   while kill -0 "$CC_PID" 2>/dev/null; do
-    # Parse latest events and show progress
     if [ -s "$CC_STREAM_FILE" ]; then
-      # Show tool calls as they happen
-      NEW_TOOLS=$(jq -c 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' "$CC_STREAM_FILE" 2>/dev/null | tail -1)
-      if [ -n "$NEW_TOOLS" ] && [ "$NEW_TOOLS" != "$LAST_TOOL" ]; then
-        echo "  [cc] Using tool: $NEW_TOOLS"
-        LAST_TOOL="$NEW_TOOLS"
+      NEW_TOOL=$(jq -c 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' "$CC_STREAM_FILE" 2>/dev/null | tail -1)
+      if [ -n "$NEW_TOOL" ] && [ "$NEW_TOOL" != "$LAST_TOOL" ]; then
+        echo "  [cc] $NEW_TOOL"
+        LAST_TOOL="$NEW_TOOL"
       fi
     fi
     sleep 2
   done
-  LAST_TOOL=""
 
-  wait "$CC_PID" 2>/dev/null
-  EXIT_CODE=$?
+  wait "$CC_PID" 2>/dev/null; EXIT_CODE=$?
   CC_END=$(date +%s)
   CC_ELAPSED=$(( CC_END - CC_START ))
 
+  # Timeout?
   if [ "$EXIT_CODE" -eq 124 ]; then
-    echo "[loop] TIMEOUT after ${CC_TIMEOUT}s"
-    log_event "timeout" "$TASK_DESC" 0
-    mark_task "$TASK_ID" "strike" "timeout after ${CC_TIMEOUT}s"
+    echo "[loop] TIMEOUT (${CC_TIMEOUT}s)"
+    log_event "timeout" 0 "elapsed=${CC_ELAPSED}s"
     rm -f "$CC_STREAM_FILE"
-    ITERATION=$((ITERATION + 1))
     continue
   fi
 
-  # Extract the result line (last line with type=result)
-  CC_OUTPUT=$(jq -c 'select(.type == "result")' "$CC_STREAM_FILE" 2>/dev/null | tail -1)
-  if [ -z "$CC_OUTPUT" ]; then
-    if [ "$EXIT_CODE" -ne 0 ]; then
-      echo "[loop] CC exited with code $EXIT_CODE"
-      CC_OUTPUT='{"is_error":true,"result":"CC process failed with exit code '"$EXIT_CODE"'","total_cost_usd":0}'
-    else
-      CC_OUTPUT='{"is_error":true,"result":"No result in CC output","total_cost_usd":0}'
-    fi
-  fi
+  # Extract result + cost from stream
+  CC_RESULT=$(jq -c 'select(.type == "result")' "$CC_STREAM_FILE" 2>/dev/null | tail -1)
+  COST=$(echo "$CC_RESULT" | jq -r '.total_cost_usd // 0' 2>/dev/null | grep -oE '^[0-9]+(\.[0-9]+)?' | head -1)
+  [ -z "$COST" ] && COST="0"
+  TOTAL_COST=$(echo "$TOTAL_COST + $COST" | bc 2>/dev/null || echo "$TOTAL_COST")
 
-  # Show summary of what CC did
+  # Tool summary
   TOOL_SUMMARY=$(jq -c 'select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | .name' "$CC_STREAM_FILE" 2>/dev/null | sort | uniq -c | sort -rn | head -5)
-  echo "[loop] CC finished in ${CC_ELAPSED}s. Tools used:"
-  echo "$TOOL_SUMMARY" | while read -r count tool; do
-    echo "  $tool × $count"
-  done
 
-  # Show preview of result
-  CC_RESULT_PREVIEW=$(echo "$CC_OUTPUT" | jq -r '.result // empty' 2>/dev/null | head -c 300)
-  if [ -n "$CC_RESULT_PREVIEW" ]; then
-    echo "[loop] CC says: ${CC_RESULT_PREVIEW}"
-  fi
+  # Result preview
+  RESULT_TEXT=$(echo "$CC_RESULT" | jq -r '.result // empty' 2>/dev/null | head -c 300)
 
   rm -f "$CC_STREAM_FILE"
 
-  # Handle malformed JSON
-  if ! echo "$CC_OUTPUT" | jq . >/dev/null 2>&1; then
-    echo "[loop] Malformed JSON from CC"
-    log_event "malformed_json" "$(echo "$CC_OUTPUT" | head -c 500)" 0
-    mark_task "$TASK_ID" "strike" "malformed JSON response"
-    ITERATION=$((ITERATION + 1))
-    continue
-  fi
-
-  # Verify result
-  VERIFY_RESULT=$(verify_result "$CC_OUTPUT" "$TASK_DESC" "$HEAD_BEFORE")
-  VERIFY_STATUS=$(echo "$VERIFY_RESULT" | cut -d: -f1)
-  VERIFY_COST=$(echo "$VERIFY_RESULT" | cut -d: -f2)
-  VERIFY_MSG=$(echo "$VERIFY_RESULT" | cut -d: -f3-)
-
-  # Sanitize cost (must be a valid number for jq)
-  if [ -z "$VERIFY_COST" ] || ! echo "$VERIFY_COST" | grep -qE '^[0-9]'; then
-    VERIFY_COST="0"
-  fi
-
-  # Record cost
-  add_cost "$VERIFY_COST"
-
-  if [ "$VERIFY_STATUS" = "pass" ]; then
-    echo "[loop] SUCCESS: $VERIFY_MSG (cost: \$$VERIFY_COST)"
-    log_event "success" "$TASK_DESC — $VERIFY_MSG" "$VERIFY_COST"
-    mark_task "$TASK_ID" "done"
-  elif [ "$VERIFY_STATUS" = "error" ] || [ "$VERIFY_STATUS" = "fail" ]; then
-    echo "[loop] FAILURE: $VERIFY_MSG (cost: \$$VERIFY_COST)"
-    log_event "failure" "$TASK_DESC — $VERIFY_MSG" "$VERIFY_COST"
-    mark_task "$TASK_ID" "strike" "$VERIFY_MSG"
-  fi
-
-  # Refresh task list periodically
-  if [ $(( (ITERATION + 1) % REFRESH_INTERVAL )) -eq 0 ]; then
-    echo "[loop] Refreshing task list..."
-    NEW_TASKS=$("$SCRIPT_DIR/discover.sh" "$PROJECT_DIR")
-    # Merge: keep existing strike counts, add new tasks
-    MERGED=$(jq -s '
-      . as [$new, $state] |
-      $state.tasks as $existing |
-      ($existing | map(.id) | unique) as $known_ids |
-      $existing + [$new[] | select(.id as $id | $known_ids | index($id) | not)]
-    ' <(echo "$NEW_TASKS") <(cat "$STATE_FILE"))
-    update_state '.tasks' "$MERGED"
-    echo "[loop] Task list refreshed"
-  fi
-
-  ITERATION=$((ITERATION + 1))
-done
-
-# ─── Cleanup ────────────────────────────────────────────────────────
-echo ""
-echo "═══════════════════════════════════════════════════"
-echo "  Session complete"
-echo "═══════════════════════════════════════════════════"
-
-# Handle any uncommitted changes (tracked modifications OR untracked files)
-HAS_UNCOMMITTED=0
-if ! git -C "$PROJECT_DIR" diff --quiet 2>/dev/null; then
-  HAS_UNCOMMITTED=1
-elif [ -n "$(git -C "$PROJECT_DIR" status --porcelain 2>/dev/null)" ]; then
-  HAS_UNCOMMITTED=1
-fi
-if [ "$HAS_UNCOMMITTED" -eq 1 ]; then
-  TEST_CMD=$(detect_test_command "$PROJECT_DIR")
-  if [ -n "$TEST_CMD" ] && eval "$TEST_CMD" >/dev/null 2>&1; then
-    git -C "$PROJECT_DIR" add -A
-    git -C "$PROJECT_DIR" commit -m "auto: WIP — session interrupted" --no-verify >/dev/null 2>&1
-    echo "[loop] Committed partial work"
+  # Did CC commit?
+  HEAD_AFTER=$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null)
+  if [ "$HEAD_BEFORE" != "$HEAD_AFTER" ]; then
+    NEW_COMMITS=$(git -C "$PROJECT_DIR" rev-list --count "$HEAD_BEFORE..$HEAD_AFTER" 2>/dev/null || echo 0)
+    TOTAL_COMMITS=$((TOTAL_COMMITS + NEW_COMMITS))
+    echo "[loop] ✓ $NEW_COMMITS commit(s) in ${CC_ELAPSED}s (\$$COST)"
+    git -C "$PROJECT_DIR" log --oneline "$HEAD_BEFORE..$HEAD_AFTER" 2>/dev/null | sed 's/^/  /'
+    log_event "success" "$COST" "commits=$NEW_COMMITS, elapsed=${CC_ELAPSED}s"
   else
-    git -C "$PROJECT_DIR" stash >/dev/null 2>&1
-    echo "[loop] Stashed uncommitted changes (tests didn't pass)"
+    echo "[loop] ✗ No commits in ${CC_ELAPSED}s (\$$COST)"
+    [ -n "$RESULT_TEXT" ] && echo "  CC: ${RESULT_TEXT:0:200}"
+    log_event "no_change" "$COST" "elapsed=${CC_ELAPSED}s"
   fi
-fi
+
+  # Show tool summary
+  if [ -n "$TOOL_SUMMARY" ]; then
+    echo "  Tools: $(echo "$TOOL_SUMMARY" | awk '{printf "%s×%s ", $2, $1}' | sed 's/ $//')"
+  fi
+  echo ""
+done
 
 # ─── Metrics ────────────────────────────────────────────────────────
 SESSION_END=$(date +%s)
-SESSION_DURATION=$(( SESSION_END - SESSION_ID ))
-TOTAL_COST=$(jq -r '.total_cost_usd // 0' "$STATE_FILE" 2>/dev/null || echo 0)
-COMPLETED_COUNT=$(jq -r '.completed | length' "$STATE_FILE" 2>/dev/null || echo 0)
-SKIPPED_COUNT=$(jq -r '.skipped | length' "$STATE_FILE" 2>/dev/null || echo 0)
+DURATION=$(( SESSION_END - SESSION_ID ))
 COMMIT_COUNT=$(git -C "$PROJECT_DIR" rev-list --count "$MAIN_BRANCH..$SESSION_BRANCH" 2>/dev/null || echo 0)
-PENDING_COUNT=$(jq -r '[.tasks[] | select(.status == "pending")] | length' "$STATE_FILE" 2>/dev/null || echo 0)
-LINES_CHANGED=$(git -C "$PROJECT_DIR" diff --stat "$MAIN_BRANCH..$SESSION_BRANCH" 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion|[0-9]+ deletion' | paste -sd', ' || echo "0")
+FILES_CHANGED=$(git -C "$PROJECT_DIR" diff --stat "$MAIN_BRANCH..$SESSION_BRANCH" 2>/dev/null | tail -1 | grep -oE '[0-9]+ file' | head -1 || echo "0 file")
 
-# Human-readable duration
-if [ "$SESSION_DURATION" -ge 3600 ]; then
-  DURATION_FMT="$((SESSION_DURATION / 3600))h $((SESSION_DURATION % 3600 / 60))m"
-elif [ "$SESSION_DURATION" -ge 60 ]; then
-  DURATION_FMT="$((SESSION_DURATION / 60))m $((SESSION_DURATION % 60))s"
+# Duration format
+if [ "$DURATION" -ge 3600 ]; then
+  DUR_FMT="$((DURATION/3600))h $((DURATION%3600/60))m"
+elif [ "$DURATION" -ge 60 ]; then
+  DUR_FMT="$((DURATION/60))m $((DURATION%60))s"
 else
-  DURATION_FMT="${SESSION_DURATION}s"
+  DUR_FMT="${DURATION}s"
 fi
 
-# Average time per iteration
-if [ "$ITERATION" -gt 0 ]; then
-  AVG_TIME=$(( SESSION_DURATION / ITERATION ))
-  AVG_COST=$(echo "$TOTAL_COST $ITERATION" | awk '{printf "%.4f", $1/$2}')
-else
-  AVG_TIME=0
-  AVG_COST="0"
-fi
+log_event "session_end" "$TOTAL_COST" "iterations=$ITERATION, commits=$COMMIT_COUNT, duration=${DURATION}s"
 
-log_event "session_end" "iterations=$ITERATION, completed=$COMPLETED_COUNT, skipped=$SKIPPED_COUNT, commits=$COMMIT_COUNT, cost=\$$TOTAL_COST, duration=${SESSION_DURATION}s"
-
-echo ""
 echo "═══════════════════════════════════════════════════"
 echo "  SESSION METRICS"
 echo "═══════════════════════════════════════════════════"
-echo ""
-echo "  Duration:        $DURATION_FMT"
-echo "  Iterations:      $ITERATION$([ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null && echo ' (unlimited)' || echo " / $MAX_ITERATIONS")"
-echo "  Avg per iter:    ${AVG_TIME}s"
-echo ""
-echo "  Tasks completed: $COMPLETED_COUNT"
-echo "  Tasks skipped:   $SKIPPED_COUNT (3-strike rule)"
-echo "  Tasks pending:   $PENDING_COUNT"
-echo ""
-echo "  Commits:         $COMMIT_COUNT on $SESSION_BRANCH"
-echo "  Lines changed:   $LINES_CHANGED"
-echo ""
-echo "  Total cost:      \$$TOTAL_COST"
-echo "  Avg cost/iter:   \$$AVG_COST"
-echo ""
+echo "  Duration:      $DUR_FMT"
+echo "  Iterations:    $ITERATION"
+echo "  Commits:       $COMMIT_COUNT"
+echo "  Files changed: $FILES_CHANGED"
+echo "  Total cost:    \$$TOTAL_COST"
+[ "$ITERATION" -gt 0 ] && echo "  Avg cost/iter: \$$(echo "scale=4; $TOTAL_COST / $ITERATION" | bc 2>/dev/null || echo '?')"
 echo "───────────────────────────────────────────────────"
 echo "  Review: git log $MAIN_BRANCH..$SESSION_BRANCH --oneline"
 echo "  Merge:  git checkout $MAIN_BRANCH && git merge $SESSION_BRANCH"
 echo "───────────────────────────────────────────────────"
 
-# Return to main branch
+# Return to main
 git -C "$PROJECT_DIR" checkout "$MAIN_BRANCH" 2>/dev/null
 echo "[loop] Returned to $MAIN_BRANCH"
