@@ -291,6 +291,18 @@ fi
 # Discover tasks
 echo "[loop] Discovering tasks..."
 TASKS=$("$SCRIPT_DIR/discover.sh" "$PROJECT_DIR")
+
+# Validate discover.sh output is well-formed JSON array
+if ! echo "$TASKS" | jq empty 2>/dev/null; then
+  echo "[loop] ERROR: discover.sh produced invalid JSON. Raw output:" >&2
+  echo "$TASKS" | head -20 >&2
+  exit 1
+fi
+if ! echo "$TASKS" | jq -e 'type == "array"' >/dev/null 2>&1; then
+  echo "[loop] ERROR: discover.sh output is valid JSON but not an array (got $(echo "$TASKS" | jq -r 'type'))" >&2
+  exit 1
+fi
+
 TASK_COUNT=$(echo "$TASKS" | jq 'length')
 echo "[loop] Found $TASK_COUNT tasks"
 
