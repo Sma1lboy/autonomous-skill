@@ -297,7 +297,7 @@ while [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null || [ "$ITERATION" -lt "$MAX_ITERAT
   TASK_PROMPT=$(build_prompt "$TASK_DESC" "$TASK_SOURCE")
 
   # Build CC invocation args (stream-json for live progress)
-  CC_ARGS=(-p "$TASK_PROMPT" --permission-mode auto --output-format stream-json --verbose)
+  CC_ARGS=(-p "$TASK_PROMPT" --permission-mode acceptEdits --output-format stream-json --verbose)
   if [ -n "$OWNER_CONTENT" ]; then
     CC_ARGS+=(--append-system-prompt "$OWNER_CONTENT")
   fi
@@ -383,6 +383,11 @@ while [ "$MAX_ITERATIONS" -eq 0 ] 2>/dev/null || [ "$ITERATION" -lt "$MAX_ITERAT
   VERIFY_STATUS=$(echo "$VERIFY_RESULT" | cut -d: -f1)
   VERIFY_COST=$(echo "$VERIFY_RESULT" | cut -d: -f2)
   VERIFY_MSG=$(echo "$VERIFY_RESULT" | cut -d: -f3-)
+
+  # Sanitize cost (must be a valid number for jq)
+  if [ -z "$VERIFY_COST" ] || ! echo "$VERIFY_COST" | grep -qE '^[0-9]'; then
+    VERIFY_COST="0"
+  fi
 
   # Record cost
   add_cost "$VERIFY_COST"
