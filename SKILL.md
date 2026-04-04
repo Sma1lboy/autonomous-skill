@@ -80,8 +80,17 @@ For each iteration:
 Workers have full access to the codebase and tools. They figure out
 the implementation themselves. Give them the WHAT, not the HOW.
 
-Good: "The test coverage for the auth module is weak. Strengthen it."
-Bad: "Read src/auth.ts, add a test in tests/auth.test.ts for the login function using jest, then run npm test."
+When dispatching a worker, tell it to use existing skill workflows where
+appropriate. Don't teach it how to code — point it at a skill:
+
+Good: "Auth module test coverage is weak. Run /qa to assess, then fix what it finds."
+Good: "The recent changes look risky. Run /review on the last 3 commits."
+Good: "Users report a login crash. Run /investigate to find the root cause, then fix it."
+Good: "This feature needs a design pass. Run /office-hours to think it through."
+Bad: "Read src/auth.ts, write a test in tests/auth.test.ts, run npm test, commit."
+
+The worker decides HOW to execute. Skills like /qa, /review, /investigate
+encode expert judgment — let them do the thinking.
 
 Keep dispatching workers until you've used all iterations or there's nothing
 impactful left. If a worker fails on something twice, skip it.
