@@ -15,3 +15,4 @@ COMPETITIVE.md
 # Temp
 /tmp/
 *.jsonl
+/ref/**

@@ -11,7 +11,7 @@ user-invocable: true
 ```bash
 SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")"
 if [ ! -d "$SCRIPT_DIR/scripts" ]; then
-  for dir in ~/.claude/skills/autonomous-skill /Volumes/ssd/i/autonomous-skill; do
+  for dir in ~/.claude/skills/autonomous-skill /Volumes/ssd/i/auto-tool-workspace/autonomous-skill; do
     if [ -d "$dir/scripts" ]; then SCRIPT_DIR="$dir"; break; fi
   done
 fi
