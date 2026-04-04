@@ -5,7 +5,11 @@ finding and fixing issues in any codebase.
 
 ## Architecture
 
-- `SKILL.md` — Claude Code skill entry point
+- `SKILL.md` — Main autonomous skill entry point (master/owner role)
+- `.claude/skills/test-worker/SKILL.md` — Test skill: spawns worker + auto-answering master for DiskClean pipeline
+- `.claude/skills/clean-sandbox/SKILL.md` — Reset test sandbox
+- `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
+- `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
 - `scripts/loop.sh` — Main autonomous loop (bash while-loop, spawns fresh CC per iteration)
 - `scripts/discover.sh` — Task discovery from TODOS.md, KANBAN.md, TODO comments, GitHub issues
 - `scripts/report.sh` — Parse autonomous-log.jsonl into human-readable summary (or `--json`)
@@ -30,6 +34,14 @@ finding and fixing issues in any codebase.
    - 3-strike rule: skip task after 3 failures
 5. Logs cost and progress to ~/.autonomous-skill/projects/SLUG/autonomous-log.jsonl
 6. At session end, appends entry to TRACE.md with commits, cost, and duration
+
+## Comms Protocol
+
+Workers use `{project}/.autonomous/comms.md` for interactive skill questions:
+- Worker writes `STATUS: WAITING` + question → polls for answer
+- Master writes `STATUS: ANSWERED` + answer → worker continues
+- Replaces AskUserQuestion which is unavailable in subagent context
+- Validated: 20+ rounds per session, cross-attention quality preserved
 
 ## Safety
 
