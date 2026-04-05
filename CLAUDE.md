@@ -85,9 +85,12 @@ The conductor tracks multi-sprint progress in `.autonomous/conductor-state.json`
 ## Testing
 
 ```bash
-bash tests/test_conductor.sh  # 38 tests: state management, phase transitions, exploration
-bash tests/test_comms.sh      # 26 tests: comms.json protocol
-shellcheck scripts/*.sh       # lint all shell scripts
+bash tests/test_conductor.sh    # 60 tests: state management, phase transitions, exploration
+bash tests/test_comms.sh        # 26 tests: comms.json protocol
+bash tests/test_persona.sh      # 15 tests: OWNER.md generation
+bash tests/test_explore_scan.sh # 31 tests: 8-dimension scoring heuristics, edge cases
+bash tests/test_loop.sh         #  9 tests: standalone launcher args, env vars, persona
+shellcheck scripts/*.sh         # lint all shell scripts
 ```
 
 Test harness uses `tests/claude` (mock CC binary) controlled by env vars:
