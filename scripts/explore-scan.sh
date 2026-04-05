@@ -11,6 +11,8 @@
 
 set -euo pipefail
 
+command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
+
 PROJECT="${1:-.}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONDUCTOR="${2:-$SCRIPT_DIR/conductor-state.sh}"
@@ -20,9 +22,15 @@ CONDUCTOR="${2:-$SCRIPT_DIR/conductor-state.sh}"
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-# Clamp a value to 0-10 integer
+# Clamp a value to 0-10 integer. Returns 0 on empty/non-numeric input.
 clamp() {
-  python3 -c "print(max(0, min(10, int($1))))"
+  local expr="${1:-0}"
+  python3 -c "
+try:
+    print(max(0, min(10, int($expr))))
+except (ValueError, TypeError, SyntaxError, ZeroDivisionError):
+    print(0)
+"
 }
 
 # Count files matching a find pattern (excludes node_modules, .git, vendor, dist)

@@ -8,9 +8,18 @@
 
 set -euo pipefail
 
+command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
+
 PROJECT="${1:-.}"
 WORKER_PID="${2:-}"
 COMMS="$PROJECT/.autonomous/comms.json"
+
+if [ ! -f "$COMMS" ]; then
+  echo "ERROR: $COMMS not found. Is the worker running?" >&2
+  exit 1
+fi
+
+trap 'echo ""; echo "  Stopped."; exit 0' INT TERM
 
 # Find worker session JSONL
 find_session() {
@@ -29,16 +38,16 @@ echo "════════════════════════�
 
 while true; do
   # --- Channel 1: comms.json ---
-  STATUS=$(python3 -c "import json; print(json.load(open('$COMMS')).get('status','?'))" 2>/dev/null || echo "?")
+  STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','?'))" "$COMMS" 2>/dev/null || echo "?")
 
   if [ "$STATUS" = "waiting" ] && [ "$LAST_STATUS" != "waiting" ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  📩 QUESTION at $(date +%H:%M:%S)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    python3 << DISPLAY
-import json
-d = json.load(open('$COMMS'))
+    python3 - "$COMMS" << 'DISPLAY'
+import json, sys
+d = json.load(open(sys.argv[1]))
 for q in d.get('questions', []):
     print(f"  [{q.get('header','')}]")
     print(f"  {q['question'][:400]}")
@@ -59,10 +68,12 @@ DISPLAY
       NEW=$((LINES - LAST_LINES))
       # Show latest tool calls
       python3 -c "
-import json
-with open('$SESSION') as f:
+import json, sys
+session_file = sys.argv[1]
+tail_n = int(sys.argv[2])
+with open(session_file) as f:
     lines = [l.strip() for l in f if l.strip()]
-for line in lines[-$NEW:]:
+for line in lines[-tail_n:]:
     try:
         obj = json.loads(line)
         if obj.get('type') == 'assistant':
@@ -72,19 +83,20 @@ for line in lines[-$NEW:]:
                     desc = b.get('input',{}).get('description','')
                     if name == 'Write':
                         fp = b.get('input',{}).get('file_path','')
-                        print(f'  ✏️  Write {fp.split(\"/\")[-1]}')
+                        print(f'  Write {fp.split(\"/\")[-1]}')
                     elif name == 'Bash':
-                        print(f'  ⚡ {desc or b.get(\"input\",{}).get(\"command\",\"\")[:60]}')
+                        print(f'  > {desc or b.get(\"input\",{}).get(\"command\",\"\")[:60]}')
                     elif name == 'Skill':
-                        print(f'  🔧 /{b.get(\"input\",{}).get(\"skill\",\"?\")}')
+                        print(f'  /{b.get(\"input\",{}).get(\"skill\",\"?\")}')
                     elif name == 'Agent':
-                        print(f'  🤖 Agent: {b.get(\"input\",{}).get(\"description\",\"\")}')
+                        print(f'  Agent: {b.get(\"input\",{}).get(\"description\",\"\")}')
                     elif name in ('Read','Edit','Grep','Glob'):
                         pass  # too noisy
                     else:
-                        print(f'  📎 {name}')
-    except: pass
-" 2>/dev/null
+                        print(f'  {name}')
+    except Exception:
+        pass
+" "$SESSION" "$NEW" 2>/dev/null
       LAST_LINES=$LINES
     fi
   fi

@@ -253,6 +253,68 @@ BASENAME=$(basename "$T")
 OUTPUT=$(PATH="$MOCK_DIR:$PATH" bash "$LOOP" "$T" 2>&1 || true)
 assert_contains "$OUTPUT" "$BASENAME" "banner shows project basename"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. Missing project directory
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "9. Missing project directory"
+MOCK_DIR=$(new_tmp)
+cat > "$MOCK_DIR/claude" << 'EOF'
+#!/usr/bin/env bash
+cat > /dev/null; exit 0
+EOF
+chmod +x "$MOCK_DIR/claude"
+cat > "$MOCK_DIR/timeout" << 'TEOF'
+#!/usr/bin/env bash
+shift; exec "$@"
+TEOF
+chmod +x "$MOCK_DIR/timeout"
+
+ERR=$(PATH="$MOCK_DIR:$PATH" bash "$LOOP" "/nonexistent/path" 2>&1 || true)
+assert_contains "$ERR" "not found" "missing project dir rejected"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 10. Missing claude binary
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "10. Missing claude binary"
+T=$(new_tmp)
+(cd "$T" && git init -q && git commit -q --allow-empty -m "init")
+
+# Empty PATH mock dir — no claude binary
+EMPTY_DIR=$(new_tmp)
+cat > "$EMPTY_DIR/timeout" << 'TEOF'
+#!/usr/bin/env bash
+shift; exec "$@"
+TEOF
+chmod +x "$EMPTY_DIR/timeout"
+
+ERR=$(PATH="$EMPTY_DIR:/usr/bin:/bin" bash "$LOOP" "$T" 2>&1 || true)
+assert_contains "$ERR" "claude CLI not found" "missing claude binary rejected"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11. Non-numeric MAX_ITERATIONS
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "11. Non-numeric MAX_ITERATIONS"
+T=$(new_tmp)
+(cd "$T" && git init -q && git commit -q --allow-empty -m "init")
+
+MOCK_DIR=$(new_tmp)
+cat > "$MOCK_DIR/claude" << 'EOF'
+#!/usr/bin/env bash
+cat > /dev/null; exit 0
+EOF
+chmod +x "$MOCK_DIR/claude"
+cat > "$MOCK_DIR/timeout" << 'TEOF'
+#!/usr/bin/env bash
+shift; exec "$@"
+TEOF
+chmod +x "$MOCK_DIR/timeout"
+
+ERR=$(MAX_ITERATIONS="abc" PATH="$MOCK_DIR:$PATH" bash "$LOOP" "$T" 2>&1 || true)
+assert_contains "$ERR" "positive integer" "non-numeric MAX_ITERATIONS rejected"
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

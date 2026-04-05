@@ -2,6 +2,8 @@
 # persona.sh — Generate OWNER.md from git history and project docs if it doesn't exist
 set -euo pipefail
 
+command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
+
 PROJECT_DIR="${1:-.}"
 OWNER_FILE="$PROJECT_DIR/OWNER.md"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

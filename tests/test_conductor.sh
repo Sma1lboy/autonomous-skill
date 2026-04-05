@@ -768,6 +768,89 @@ mkdir -p "$T"
 ERR=$(bash "$SCANNER" "$T" "$CONDUCTOR" 2>&1 || true)
 assert_contains "$ERR" "ERROR" "scan fails without initialized state"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 35. max_sprints validation rejects non-numeric
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "35. Init — max_sprints validation"
+T=$(new_tmp)
+ERR=$(bash "$CONDUCTOR" init "$T" "test" "abc" 2>&1 || true)
+assert_contains "$ERR" "positive integer" "non-numeric max_sprints rejected"
+
+ERR2=$(bash "$CONDUCTOR" init "$T" "test" "0" 2>&1 || true)
+assert_contains "$ERR2" "must be > 0" "zero max_sprints rejected"
+
+# Valid numeric should succeed
+T2=$(new_tmp)
+bash "$CONDUCTOR" init "$T2" "test" "5" > /dev/null 2>&1
+assert_file_exists "$T2/.autonomous/conductor-state.json" "numeric max_sprints accepted"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 36. explore-score validates dimension and score
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "36. Explore-score — input validation"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "validate test" 10 > /dev/null
+
+ERR=$(bash "$CONDUCTOR" explore-score "$T" "bogus_dim" "5" 2>&1 || true)
+assert_contains "$ERR" "unknown dimension" "invalid dimension rejected"
+
+ERR=$(bash "$CONDUCTOR" explore-score "$T" "security" "notanumber" 2>&1 || true)
+assert_contains "$ERR" "must be numeric" "non-numeric score rejected"
+
+# Valid should succeed
+RESULT=$(bash "$CONDUCTOR" explore-score "$T" "security" "7.5" 2>&1)
+assert_eq "$RESULT" "ok" "valid dimension + numeric score accepted"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 37. Trap handler cleans up lock file on exit
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "37. Trap cleanup — lock and tmp files"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "trap test" 10 > /dev/null
+
+# Lock should be cleaned up after init (since trap EXIT fires)
+# The lock is acquired in init, but cleanup runs on EXIT
+LOCK="$T/.autonomous/conductor.lock"
+if [ -f "$LOCK" ]; then
+  fail "lock file should be cleaned up after script exits"
+else
+  ok "lock file cleaned up after script exits"
+fi
+
+# No stale tmp files
+TMP_COUNT=$(find "$T/.autonomous" -name '*.tmp.*' 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$TMP_COUNT" "0" "no stale tmp files after operations"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 38. explore-scan.sh clamp handles edge cases
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "38. Explore scan — clamp edge cases"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "clamp edge test" 10 > /dev/null
+
+# Create a project with NO source files at all (just a test file)
+# This tests the division-by-zero guard in test_coverage and dx
+mkdir -p "$T/tests"
+echo 'test=1' > "$T/tests/test_only.py"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+OUTPUT=$(bash "$SCANNER" "$T" "$CONDUCTOR" 2>&1)
+assert_contains "$OUTPUT" "Exploration scan complete" "scan completes with only test files"
+
+# All scores should be valid (0-10)
+VALID=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+exp = d['exploration']
+all_ok = all(0 <= exp[dim]['score'] <= 10 for dim in exp)
+print('ok' if all_ok else 'fail')
+" 2>/dev/null || echo "fail")
+assert_eq "$VALID" "ok" "all scores valid with only test files (no div-by-zero)"
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

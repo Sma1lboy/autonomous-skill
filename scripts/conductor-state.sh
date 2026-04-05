@@ -15,11 +15,29 @@
 
 set -euo pipefail
 
+command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
+
 CMD="${1:-}"
 PROJECT="${2:-.}"
 STATE_DIR="$PROJECT/.autonomous"
 STATE_FILE="$STATE_DIR/conductor-state.json"
 LOCK_FILE="$STATE_DIR/conductor.lock"
+
+# ── Cleanup ───────────────────────────────────────────────────────────────
+
+cleanup() {
+  # Remove tmp files left by atomic_write or write_state
+  rm -f "$STATE_FILE.tmp.$$" 2>/dev/null || true
+  # Release lock if we hold it
+  if [ -f "$LOCK_FILE" ] 2>/dev/null; then
+    local lock_pid
+    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+    if [ "$lock_pid" = "$$" ]; then
+      rm -f "$LOCK_FILE" 2>/dev/null || true
+    fi
+  fi
+}
+trap cleanup EXIT
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -120,6 +138,8 @@ cmd_init() {
   local mission="${3:-}"
   local max_sprints="${4:-10}"
   [ -z "$mission" ] && die "Usage: conductor-state.sh init <project-dir> <mission> [max-sprints]"
+  [[ "$max_sprints" =~ ^[0-9]+$ ]] || die "max-sprints must be a positive integer, got: $max_sprints"
+  [ "$max_sprints" -gt 0 ] || die "max-sprints must be > 0, got: $max_sprints"
 
   mkdir -p "$STATE_DIR"
   acquire_lock
@@ -302,6 +322,11 @@ cmd_explore_score() {
   local dimension="${3:-}"
   local score="${4:-}"
   [ -z "$dimension" ] || [ -z "$score" ] && die "Usage: conductor-state.sh explore-score <project-dir> <dimension> <score>"
+  # Validate score is a number (integer or float, including negative)
+  python3 -c "float('$score')" 2>/dev/null || die "score must be numeric, got: $score"
+  # Validate dimension is known
+  local valid_dims="test_coverage error_handling security code_quality documentation architecture performance dx"
+  echo "$valid_dims" | grep -qw "$dimension" || die "unknown dimension: $dimension (valid: $valid_dims)"
 
   local state
   state=$(read_state_strict) || die "No conductor state found."
