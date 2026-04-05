@@ -89,7 +89,7 @@ echo '{"status":"idle"}' > .autonomous/comms.json
 
 1. **Sense** — Feel the project. What's solid? What's fragile? What's ugly?
 
-2. **Direct** — Spawn a worker via `claude -p` (independent session, full tools).
+2. **Direct** — Spawn a worker (independent session, full tools).
 
    Give them one thing to do, not a pipeline:
    - New idea? → "Run /office-hours. Context: ..."
@@ -105,10 +105,10 @@ echo '{"status":"idle"}' > .autonomous/comms.json
    [worker context + direction — see "Worker Prompt" section below]
    WORKER_EOF
 
-   # Dispatch in tmux (visible to user) or fall back to background
+   # Dispatch in tmux (TUI mode, visible to user) or fall back to headless background
    if command -v tmux &>/dev/null && tmux info &>/dev/null; then
      tmux new-window -n "worker" \
-       "cd $(pwd) && claude -p \"\$(cat .autonomous/worker-prompt.md)\" --dangerously-skip-permissions; echo 'Worker done. Press enter.'; read"
+       "cd $(pwd) && claude --dangerously-skip-permissions < .autonomous/worker-prompt.md"
      echo "Worker launched in tmux window 'worker'"
    else
      claude -p "$(cat .autonomous/worker-prompt.md)" --dangerously-skip-permissions \
@@ -121,32 +121,71 @@ echo '{"status":"idle"}' > .autonomous/comms.json
    all MCP tools. gstack skills work exactly as designed, including
    internal subagent spawns for adversarial reviews.
 
-3. **Respond** — The worker writes questions to `.autonomous/comms.json`.
-   You poll and answer. Run the master-watch script for dual-channel
-   monitoring (comms + worker activity):
+3. **Respond** — Monitor the worker via **dual-channel polling** (comms.json
+   AND tmux worker activity). Run this as a background Bash command:
 
    ```bash
-   bash scripts/master-watch.sh "$(pwd)"
+   _LAST_COMMIT=$(git log --oneline -1 2>/dev/null)
+   while true; do
+     STATUS=$(python3 -c "import json; d=json.load(open('.autonomous/comms.json')); print(d.get('status','idle'))" 2>/dev/null)
+     # Worker finished its sprint
+     if [ "$STATUS" = "done" ]; then
+       echo "=== WORKER DONE ==="
+       python3 -c "import json; d=json.load(open('.autonomous/comms.json')); print(json.dumps(d, indent=2))" 2>/dev/null
+       break
+     fi
+     # Worker asking a question
+     if [ "$STATUS" = "waiting" ]; then
+       echo "=== COMMS: WORKER ASKING ==="
+       python3 -c "import json; d=json.load(open('.autonomous/comms.json')); print(json.dumps(d, indent=2))" 2>/dev/null
+       break
+     fi
+     # Channel 2: tmux/process liveness check
+     if command -v tmux &>/dev/null && tmux info &>/dev/null; then
+       if ! tmux list-windows 2>/dev/null | grep -q worker; then
+         echo "=== WORKER WINDOW CLOSED ==="
+         break
+       fi
+       # Fallback: detect idle TUI with new commits (worker forgot to write done)
+       PANE=$(tmux capture-pane -t worker -p -S -5 2>/dev/null | tail -5)
+       LATEST_COMMIT=$(git log --oneline -1 2>/dev/null)
+       if [ "$LATEST_COMMIT" != "$_LAST_COMMIT" ] && echo "$PANE" | grep -qE '(^❯|Cogitated|idle)'; then
+         echo "=== WORKER DONE (detected via new commit + idle TUI) ==="
+         echo "Latest commit: $LATEST_COMMIT"
+         break
+       fi
+       _LAST_COMMIT="${_LAST_COMMIT:-$LATEST_COMMIT}"
+       echo "=== WORKER TUI ($(date +%H:%M:%S)) ==="
+       echo "$PANE"
+       echo "=== COMMS: $STATUS ==="
+     elif [ -n "$WORKER_PID" ]; then
+       if ! kill -0 $WORKER_PID 2>/dev/null; then
+         echo "=== WORKER PROCESS EXITED ==="
+         cat .autonomous/worker-output.log 2>/dev/null | tail -30
+         break
+       fi
+     fi
+     sleep 8
+   done
    ```
 
-   Or manual poll + answer:
-   ```bash
-   # poll
-   python3 -c "import json,time
-   while True:
-     d=json.load(open('.autonomous/comms.json'))
-     if d.get('status')=='waiting': print(json.dumps(d,indent=2)); break
-     time.sleep(3)"
-
-   # answer
-   python3 -c "import json; json.dump({'status':'answered','answers':['A']}, open('.autonomous/comms.json','w'))"
-   ```
+   When the poll breaks, handle the result:
+   - **WORKER DONE**: sprint complete. Proceed to Summarize.
+   - **WORKER ASKING**: read the question, decide using your product
+     intuition, then answer:
+     ```bash
+     python3 -c "import json; json.dump({'status':'answered','answers':['A']}, open('.autonomous/comms.json','w'))"
+     ```
+     Then restart the polling loop.
+   - **WORKER WINDOW CLOSED** / **WORKER PROCESS EXITED**: worker exited
+     unexpectedly. Check git log for commits. Proceed to Summarize.
 
    **You are the decision-maker.** Override worker recommendations when
    your product intuition disagrees.
 
-4. **Summarize** — When the worker exits, check its output and git log.
-   Distill what happened in 2-3 sentences. Feed into next cycle.
+4. **Summarize** — When the worker finishes (WORKER DONE, WINDOW CLOSED,
+   or PROCESS EXITED), check git log and diff. Distill what happened in
+   2-3 sentences. Feed into next cycle.
 
 ## Worker Prompt
 
@@ -171,7 +210,10 @@ I don't have AskUserQuestion. The project owner is monitoring .autonomous/comms.
 To ask: `python3 -c "import json; json.dump({'status':'waiting','questions':[{'question':'...','header':'...','options':[{'label':'...'}],'multiSelect':False}],'rec':'A'}, open('.autonomous/comms.json','w'))"`
 To wait: `python3 -c "import json,time;\nwhile True:\n d=json.load(open('.autonomous/comms.json'))\n if d.get('status')=='answered':\n  for a in d.get('answers',[]):print(a)\n  break\n time.sleep(3)"`
 
-Only valid statuses: "idle", "waiting", "answered". The owner will respond. I don't self-answer or self-approve.
+Valid statuses: "idle", "waiting", "answered", "done". The owner will respond to "waiting". I don't self-answer or self-approve.
+
+When the sprint is complete (all steps done, committed), write done status:
+`python3 -c "import json; json.dump({'status':'done','summary':'...'}, open('.autonomous/comms.json','w'))"`
 
 Tips from my mentor:
 - This is a full sprint, not one skill. Each skill's output feeds the next.
