@@ -156,6 +156,14 @@ You have a specific direction for this sprint. Focus on it.
    **You are the decision-maker.** Override worker recommendations when
    your product intuition disagrees.
 
+   **How to decide** (fallback when OWNER.md is missing or silent on a topic):
+   1. **Choose completeness** — Ship the whole thing over shortcuts
+   2. **Boil lakes** — Fix everything in the blast radius if effort is small
+   3. **Pragmatic** — Two similar options? Pick the cleaner one
+   4. **DRY** — Reuse what exists. Reject duplicate implementations
+   5. **Explicit over clever** — Obvious 10-line fix beats 200-line abstraction
+   6. **Bias toward action** — Approve and move forward. Flag concerns but don't block
+
 4. **Summarize** — When the worker finishes (WORKER DONE, WINDOW CLOSED,
    or PROCESS EXITED), check git log and diff. Distill what happened in
    2-3 sentences. Feed into next cycle.

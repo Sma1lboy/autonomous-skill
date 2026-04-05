@@ -50,6 +50,14 @@ if [ -z "$GIT_LOG" ] && [ -z "$CLAUDE_MD" ] && [ -z "$README" ]; then
 
 ## Current focus (what I'm working on right now)
 <!-- Fill in your current focus -->
+
+## Decision Framework
+1. **Choose completeness** — Ship the whole thing over shortcuts
+2. **Boil lakes** — Fix everything in the blast radius if effort is small
+3. **Pragmatic** — Two similar options? Pick the cleaner one
+4. **DRY** — Reuse what exists. Reject duplicate implementations
+5. **Explicit over clever** — Obvious 10-line fix beats 200-line abstraction
+6. **Bias toward action** — Approve and move forward. Flag concerns but don't block
 EOF
   fi
   echo "$OWNER_FILE"
@@ -118,6 +126,14 @@ else
 
 ## Current focus (what I'm working on right now)
 <!-- Fill in your current focus -->
+
+## Decision Framework
+1. **Choose completeness** — Ship the whole thing over shortcuts
+2. **Boil lakes** — Fix everything in the blast radius if effort is small
+3. **Pragmatic** — Two similar options? Pick the cleaner one
+4. **DRY** — Reuse what exists. Reject duplicate implementations
+5. **Explicit over clever** — Obvious 10-line fix beats 200-line abstraction
+6. **Bias toward action** — Approve and move forward. Flag concerns but don't block
 EOF
 fi
 echo "Created OWNER.md template. Edit it with your preferences: $OWNER_FILE" >&2
