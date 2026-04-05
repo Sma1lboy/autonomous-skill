@@ -282,7 +282,6 @@ fi
 # Clean up sprint branch
 git branch -D "$SPRINT_BRANCH" 2>/dev/null || true
 ```
-
 **If exploring**: Score the dimension after the sprint:
 ```bash
 if [ "$PHASE" = "exploring" ]; then
