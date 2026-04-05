@@ -79,7 +79,8 @@ Your job is to:
 Before dispatching your first sprint:
 
 ```bash
-git checkout -b "auto/session-$(date +%s)"
+SESSION_BRANCH="auto/session-$(date +%s)"
+git checkout -b "$SESSION_BRANCH"
 mkdir -p .autonomous
 bash "$SCRIPT_DIR/scripts/conductor-state.sh" init "$(pwd)" "$_DIRECTION" "$_MAX_SPRINTS"
 ```
@@ -124,11 +125,19 @@ Register the sprint:
 bash "$SCRIPT_DIR/scripts/conductor-state.sh" sprint-start "$(pwd)" "$SPRINT_DIRECTION"
 ```
 
+Create a sprint branch off the conductor branch. Each sprint works in
+isolation — successful sprints merge back, failed ones get discarded.
+
+```bash
+SPRINT_NUM=$(python3 -c "import json; d=json.load(open('.autonomous/conductor-state.json')); print(len(d['sprints']))")
+SPRINT_BRANCH="${SESSION_BRANCH}/sprint-${SPRINT_NUM}"
+git checkout -b "$SPRINT_BRANCH"
+```
+
 Write the sprint master prompt and dispatch via `claude -p` in tmux for
 true context isolation. Each sprint gets a fresh context window.
 
 ```bash
-SPRINT_NUM=$(python3 -c "import json; d=json.load(open('.autonomous/conductor-state.json')); print(len(d['sprints']))")
 PREV_SUMMARY=""
 [ -f ".autonomous/sprint-$((SPRINT_NUM-1))-summary.json" ] && \
   PREV_SUMMARY=$(cat ".autonomous/sprint-$((SPRINT_NUM-1))-summary.json")
@@ -250,6 +259,29 @@ echo "Phase after sprint $SPRINT_NUM: $PHASE"
 
 If the sprint master reported "direction_complete: true" but git shows no
 commits, override to "false".
+
+**Merge or discard the sprint branch:**
+
+```bash
+# Switch back to conductor branch
+git checkout "$SESSION_BRANCH"
+
+if [ "$STATUS" = "complete" ] || [ "$STATUS" = "partial" ]; then
+  # Merge sprint results into conductor branch
+  HAS_COMMITS=$(git log "$SESSION_BRANCH".."$SPRINT_BRANCH" --oneline 2>/dev/null | head -1)
+  if [ -n "$HAS_COMMITS" ]; then
+    git merge --no-ff "$SPRINT_BRANCH" -m "sprint $SPRINT_NUM: $SUMMARY"
+    echo "Sprint $SPRINT_NUM merged into $SESSION_BRANCH"
+  else
+    echo "Sprint $SPRINT_NUM had no commits, skipping merge"
+  fi
+else
+  echo "Sprint $SPRINT_NUM discarded ($STATUS)"
+fi
+
+# Clean up sprint branch
+git branch -D "$SPRINT_BRANCH" 2>/dev/null || true
+```
 
 **If exploring**: Score the dimension after the sprint:
 ```bash
