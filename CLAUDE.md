@@ -26,6 +26,7 @@ Conductor (SKILL.md, user's CC session)
 - `SKILL.md` — Conductor: multi-sprint orchestrator, phase management, exploration strategy
 - `SPRINT.md` — Sprint master: per-sprint execution (Sense->Direct->Respond->Summarize)
 - `scripts/conductor-state.sh` — Conductor state management (atomic writes, PID lock, phase transitions)
+- `scripts/explore-scan.sh` — Project scanner: scores 8 exploration dimensions via bash heuristics
 - `scripts/persona.sh` — OWNER.md auto-generation from git history + project docs
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
 - `scripts/master-poll.sh` — Manual master polling for comms.json

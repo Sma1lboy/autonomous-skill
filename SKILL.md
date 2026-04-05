@@ -104,7 +104,11 @@ bash "$SCRIPT_DIR/scripts/conductor-state.sh" read "$(pwd)"
 - Give a concrete, focused direction for this sprint
 
 **If phase is "exploring":**
-- Pick the weakest dimension:
+- Scan the project to score each dimension (fast heuristics, not a full audit):
+  ```bash
+  bash "$SCRIPT_DIR/scripts/explore-scan.sh" "$(pwd)" "$SCRIPT_DIR/scripts/conductor-state.sh"
+  ```
+- Pick the weakest dimension (now informed by scan scores):
   ```bash
   bash "$SCRIPT_DIR/scripts/conductor-state.sh" explore-pick "$(pwd)"
   ```

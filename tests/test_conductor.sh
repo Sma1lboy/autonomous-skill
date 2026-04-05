@@ -457,6 +457,317 @@ print(d['max_directed_sprints'])
 ")
 assert_eq "$MAX_DIR" "14" "70% of 20 = 14 max directed sprints"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 23. explore-scan.sh scores all 8 dimensions
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "23. Explore scan — scores all dimensions"
+SCANNER="$SCRIPT_DIR/../scripts/explore-scan.sh"
+T=$(new_tmp)
+
+# Initialize conductor state
+bash "$CONDUCTOR" init "$T" "scan test" 10 > /dev/null
+
+# Create a minimal project structure
+mkdir -p "$T/src" "$T/tests"
+echo 'def hello(): pass' > "$T/src/app.py"
+echo 'def test_hello(): pass' > "$T/tests/test_app.py"
+echo '# TODO: fix this' > "$T/src/util.py"
+cat > "$T/src/main.sh" << 'SH'
+#!/usr/bin/env bash
+echo "Usage: main.sh [options]"
+if [ "$1" = "--help" ]; then echo "help"; fi
+SH
+echo '# My Project' > "$T/README.md"
+# Initialize a git repo so README freshness check works
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+OUTPUT=$(bash "$SCANNER" "$T" "$CONDUCTOR" 2>&1)
+assert_contains "$OUTPUT" "test_coverage:" "scan reports test_coverage"
+assert_contains "$OUTPUT" "error_handling:" "scan reports error_handling"
+assert_contains "$OUTPUT" "security:" "scan reports security"
+assert_contains "$OUTPUT" "code_quality:" "scan reports code_quality"
+assert_contains "$OUTPUT" "documentation:" "scan reports documentation"
+assert_contains "$OUTPUT" "architecture:" "scan reports architecture"
+assert_contains "$OUTPUT" "performance:" "scan reports performance"
+assert_contains "$OUTPUT" "dx:" "scan reports dx"
+assert_contains "$OUTPUT" "Exploration scan complete" "scan reports completion"
+
+# Verify all dimensions are now audited in state
+AUDITED=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+exp = d['exploration']
+all_audited = all(exp[dim]['audited'] for dim in exp)
+all_scored = all(isinstance(exp[dim]['score'], (int, float)) for dim in exp)
+print('ok' if all_audited and all_scored else 'fail')
+" 2>/dev/null || echo "fail")
+assert_eq "$AUDITED" "ok" "all dimensions audited with numeric scores"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 24. explore-scan.sh test_coverage scoring
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "24. Explore scan — test_coverage scoring"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "coverage test" 10 > /dev/null
+
+# Project with 1 test file and 4 source files → ratio 0.25 → score 2
+mkdir -p "$T/src" "$T/tests"
+echo 'x=1' > "$T/src/a.py"
+echo 'x=2' > "$T/src/b.py"
+echo 'x=3' > "$T/src/c.py"
+echo 'x=4' > "$T/src/d.py"
+echo 'test=1' > "$T/tests/test_a.py"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+TC=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['test_coverage']['score']))
+")
+assert_eq "$TC" "2" "1 test / 4 src = score 2"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 25. explore-scan.sh security scoring (no issues = 10)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "25. Explore scan — security clean project"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "sec test" 10 > /dev/null
+
+# Clean project, no security issues
+mkdir -p "$T/src"
+echo 'print("hello")' > "$T/src/app.py"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+SEC=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['security']['score']))
+")
+assert_eq "$SEC" "10" "clean project gets security score 10"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 26. explore-scan.sh security scoring (issues lower score)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "26. Explore scan — security issues"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "sec issues test" 10 > /dev/null
+
+mkdir -p "$T/src"
+echo '# TODO: security fix needed' > "$T/src/app.py"
+echo 'password = "hunter2"' > "$T/src/config.py"
+echo 'DB_PASS=secret' > "$T/.env"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+SEC=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['security']['score']))
+")
+# 3 issues * 2 = 6, 10 - 6 = 4
+assert_eq "$SEC" "4" "3 security issues → score 4"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 27. explore-scan.sh code_quality (TODOs lower score)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "27. Explore scan — code quality with TODOs"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "quality test" 10 > /dev/null
+
+mkdir -p "$T/src"
+echo '# TODO: refactor' > "$T/src/a.py"
+echo '# FIXME: broken' > "$T/src/b.py"
+echo '# HACK: workaround' > "$T/src/c.py"
+echo 'clean = True' > "$T/src/d.py"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+CQ=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['code_quality']['score']))
+")
+assert_eq "$CQ" "7" "3 TODO files → score 7"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 28. explore-scan.sh documentation scoring
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "28. Explore scan — documentation"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "doc test" 10 > /dev/null
+
+# Project with README (4pts) + docs/ (3pts) + fresh README (3pts) = 10
+mkdir -p "$T/docs"
+echo '# Docs' > "$T/README.md"
+echo 'guide' > "$T/docs/guide.md"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+DOC=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['documentation']['score']))
+")
+assert_eq "$DOC" "10" "README + docs/ + fresh commit = score 10"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 29. explore-scan.sh architecture (big files lower score)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "29. Explore scan — architecture big files"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "arch test" 10 > /dev/null
+
+mkdir -p "$T/src"
+# Create a file with 350 lines (> 300 threshold)
+python3 -c "
+for i in range(350):
+    print(f'line_{i} = {i}')
+" > "$T/src/big.py"
+echo 'small = 1' > "$T/src/small.py"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+ARCH=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['architecture']['score']))
+")
+assert_eq "$ARCH" "8" "1 big file → score 8"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 30. explore-scan.sh dx scoring (help patterns)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "30. Explore scan — dx with help patterns"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "dx test" 10 > /dev/null
+
+mkdir -p "$T/scripts"
+cat > "$T/scripts/run.sh" << 'SH'
+#!/usr/bin/env bash
+echo "Usage: run.sh [--help]"
+SH
+cat > "$T/scripts/build.sh" << 'SH'
+#!/usr/bin/env bash
+echo "Usage: build.sh"
+SH
+cat > "$T/scripts/deploy.sh" << 'SH'
+#!/usr/bin/env bash
+echo "deploying..."
+SH
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+DX=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['dx']['score']))
+")
+# 2 help files / 3 cli files = 6.67 → 6
+assert_eq "$DX" "6" "2/3 scripts with help → score 6"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 31. explore-scan.sh scores are clamped 0-10
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "31. Explore scan — scores clamped"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "clamp test" 10 > /dev/null
+
+# Many test files, few source files → ratio > 1 → should clamp to 10
+mkdir -p "$T/tests"
+echo 'x=1' > "$T/src.py"
+for i in $(seq 1 20); do echo "t=$i" > "$T/tests/test_$i.py"; done
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+VALID=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+exp = d['exploration']
+all_ok = all(0 <= exp[dim]['score'] <= 10 for dim in exp)
+print('ok' if all_ok else 'fail')
+" 2>/dev/null || echo "fail")
+assert_eq "$VALID" "ok" "all scores within 0-10 range"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 32. explore-scan.sh + explore-pick integration
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "32. Explore scan + pick integration"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "integration test" 10 > /dev/null
+
+# Create project where security is weakest
+mkdir -p "$T/src" "$T/tests" "$T/docs"
+echo '# Docs' > "$T/README.md"
+echo 'guide' > "$T/docs/guide.md"
+echo 'def test_a(): pass' > "$T/tests/test_a.py"
+echo 'try: pass\nexcept: pass' > "$T/src/app.py"
+echo 'password = "hunter2"\napi_key = "sk-123"' > "$T/src/secrets.py"
+echo 'DB=x' > "$T/.env"
+(cd "$T" && git init -q && git add -A && git commit -q -m "init")
+
+# Scan first
+bash "$SCANNER" "$T" "$CONDUCTOR" > /dev/null 2>&1
+
+# Now pick should choose the lowest-scored dimension
+DIM=$(bash "$CONDUCTOR" explore-pick "$T")
+# Security should be lowest due to hardcoded secrets + .env
+SEC=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+print(int(d['exploration']['security']['score']))
+")
+PICK_SCORE=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+scores = {dim: d['exploration'][dim]['score'] for dim in d['exploration']}
+lowest = min(scores, key=scores.get)
+print(lowest)
+")
+assert_eq "$DIM" "$PICK_SCORE" "explore-pick selects lowest-scored dimension after scan"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 33. explore-scan.sh handles empty project
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "33. Explore scan — empty project"
+T=$(new_tmp)
+bash "$CONDUCTOR" init "$T" "empty test" 10 > /dev/null
+(cd "$T" && git init -q && git commit -q --allow-empty -m "init")
+
+OUTPUT=$(bash "$SCANNER" "$T" "$CONDUCTOR" 2>&1)
+assert_contains "$OUTPUT" "Exploration scan complete" "scan completes on empty project"
+
+VALID=$(python3 -c "
+import json
+d = json.load(open('$T/.autonomous/conductor-state.json'))
+exp = d['exploration']
+all_ok = all(0 <= exp[dim]['score'] <= 10 for dim in exp)
+print('ok' if all_ok else 'fail')
+" 2>/dev/null || echo "fail")
+assert_eq "$VALID" "ok" "empty project gets valid scores"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 34. explore-scan.sh requires initialized state
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "34. Explore scan — requires state"
+T=$(new_tmp)
+mkdir -p "$T"
+ERR=$(bash "$SCANNER" "$T" "$CONDUCTOR" 2>&1 || true)
+assert_contains "$ERR" "ERROR" "scan fails without initialized state"
+
 # ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
