@@ -22,7 +22,7 @@ Total cost: $4.20. No meetings required.<br>
 A self-driving project agent for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 Drop it into any git repo, run `/autonomous-skill`, go to sleep.
 
-[Quickstart](#-quickstart) · [How It Works](#-how-it-works) · [Configuration](#-configuration) · [Safety](#-safety) · [Competitive Analysis](COMPETITIVE.md)
+[Quickstart](#quickstart) · [Architecture](#architecture) · [How It Works](#how-it-works) · [Configuration](#configuration) · [Safety](#safety) · [Testing](#testing)
 
 </div>
 
@@ -45,94 +45,198 @@ That's it. It creates an `auto/session-*` branch and starts working.
 
 ---
 
+## Architecture
+
+Three-layer hierarchy with full context isolation between layers:
+
+```
+Conductor (SKILL.md — runs in user's Claude Code session)
+  │
+  ├── Plans sprint directions (directed phase or exploration phase)
+  ├── Dispatches sprint masters via claude -p in tmux
+  ├── Evaluates sprint results, manages phase transitions
+  │
+  └── Sprint Master (SPRINT.md — separate claude -p session)
+        │
+        ├── Sense → Direct → Respond → Summarize loop
+        ├── Dispatches workers via tmux / headless claude -p
+        ├── Answers worker questions via comms.json protocol
+        │
+        └── Worker (full Claude session with all tools)
+              │
+              └── Executes the actual work: reads code, edits files,
+                  runs tests, commits changes
+```
+
+Each layer runs in its own Claude session — fresh context per sprint, no bleed between layers.
+
+---
+
 ## How It Works
 
-```
-┌─────────────────────────────────────────────────┐
-│           /autonomous-skill                     │
-│                                                 │
-│  ┌──────────┐   ┌──────────┐   ┌────────────┐  │
-│  │ persona  │──▶│ discover │──▶│  loop.sh   │  │
-│  │  .sh     │   │  .sh     │   │            │  │
-│  └──────────┘   └──────────┘   │ for each   │  │
-│   OWNER.md       task list     │  iteration: │  │
-│   (who you are)  (what to do)  │  ┌───────┐  │  │
-│                                │  │claude │  │  │
-│                                │  │  -p   │  │  │
-│                                │  └───┬───┘  │  │
-│                                │      │      │  │
-│                                │  HEAD moved? │  │
-│                                │  ✓ = success │  │
-│                                │  ✗ = retry   │  │
-│                                └────────────┘  │
-│                                                 │
-│  Output: auto/ branch + TRACE.md + log.jsonl   │
-└─────────────────────────────────────────────────┘
+1. **Persona** — `persona.sh` reads your git history + project docs to understand your coding style. Writes `OWNER.md`.
+2. **Discovery** — The conductor talks to you to understand the mission. If you passed a direction in args, it confirms and moves on.
+3. **Session** — Creates an `auto/session-TIMESTAMP` branch and initializes `conductor-state.json`.
+4. **Conductor loop** — Plan → Dispatch → Monitor → Evaluate → Repeat:
+   - **Directed phase**: breaks your mission into sprint-sized tasks, dispatches one sprint master per task
+   - **Phase transition**: when direction is complete (2 consecutive signals + commits, max sprints reached, or 2 zero-commit sprints)
+   - **Exploration phase**: scans the project across 8 dimensions, picks the weakest, generates improvement sprints
+5. **Sprint execution** — Each sprint master gets a fresh `claude -p` session, dispatches a worker, answers questions via `comms.json`, and writes `sprint-summary.json` when done.
+6. **Merge/discard** — Successful sprints merge back to the session branch. Failed sprints are discarded.
+7. **Session ends** when all sprints are used up or the project feels solid.
+
+### Exploration Dimensions
+
+When the directed mission is complete, the conductor autonomously explores 8 dimensions:
+
+| Dimension | What it audits |
+|-----------|---------------|
+| `test_coverage` | Untested code paths, missing edge cases |
+| `error_handling` | Missing error messages, unhandled failures |
+| `security` | Hardcoded secrets, injection vulnerabilities, input validation |
+| `code_quality` | Dead code, duplication, overly complex functions |
+| `documentation` | README accuracy, missing docstrings, stale docs |
+| `architecture` | Module boundaries, dependency directions, separation of concerns |
+| `performance` | N+1 queries, blocking I/O, missing caching |
+| `dx` | CLI help text, error messages, setup instructions |
+
+Dimensions are scored via fast bash heuristics (`explore-scan.sh`), and the weakest is selected for each exploration sprint.
+
+### Comms Protocol
+
+Workers can't use `AskUserQuestion` in subagent context. Instead, they write questions to `.autonomous/comms.json`:
+
+```json
+{"status": "waiting", "questions": [{"question": "...", "options": [...]}], "rec": "A"}
 ```
 
-| Step | What happens |
-|------|-------------|
-| **Persona** | `persona.sh` reads your git history + CLAUDE.md to understand your coding style and priorities. Writes `OWNER.md`. |
-| **Discover** | `discover.sh` scans TODOS.md, code `TODO:` comments, KANBAN.md, and GitHub issues. Outputs a priority-sorted task list. |
-| **Loop** | `loop.sh` creates a session branch, then for each iteration: spawns `claude -p` with your persona + task, watches tool calls in real-time, checks if HEAD moved (= commit = success). |
-| **End** | Prints metrics (duration, commits, cost), appends to TRACE.md, returns to main. |
+The sprint master polls, decides using product intuition (or OWNER.md guidance), and writes back:
 
-Each `claude -p` invocation is a **fresh conversation** with full permissions. CC decides what to do: read code, edit files, run tests, commit. loop.sh just checks the result.
+```json
+{"status": "answered", "answers": ["A"]}
+```
+
+Valid statuses: `idle`, `waiting`, `answered`, `done`.
 
 ---
 
 ## Usage
 
 ```bash
-# Default: 50 iterations
+# Default: 10 sprints
 /autonomous-skill
 
-# Quick test: 3 iterations
+# Quick: 3 sprints
 /autonomous-skill 3
 
-# Unlimited: runs until Ctrl+C or no tasks left
+# With direction: focus on a specific area
+/autonomous-skill 5 build REST API
+
+# Unlimited sprints
 /autonomous-skill unlimited
 
-# With direction: focus the agent on a specific area
+# Direction only (default 10 sprints)
 /autonomous-skill fix all auth bugs
+```
 
-# Parallel: run N tasks simultaneously via worktrees
-MAX_ITERATIONS=20 bash scripts/loop.sh --parallel 3 .
+### Standalone (outside Claude Code)
+
+```bash
+# Direct bash invocation via loop.sh
+AUTONOMOUS_DIRECTION="fix auth bugs" bash scripts/loop.sh /path/to/project
 ```
 
 ---
 
 ## Configuration
 
-| Variable / Flag | Default | Description |
-|----------------|---------|-------------|
-| `MAX_ITERATIONS` / `--max-iterations` | `50` | Max loop iterations (0 = unlimited) |
-| `CC_TIMEOUT` / `--timeout` | `900` | Timeout per CC invocation (seconds) |
-| `AUTONOMOUS_DIRECTION` / `--direction` | _(none)_ | Session focus (e.g. "fix auth bugs") |
-| `MAX_COST_USD` / `--max-cost` | _(none)_ | Stop when total cost exceeds this |
-| `--dry-run` | off | Preview tasks without running CC |
-| `--resume` | off | Continue on existing session branch |
-| `--parallel N` | off | Run N tasks in parallel via worktrees |
-| `--stop` | — | Signal a running session to stop |
-
-Or use `.autonomous-skill.yml` in your project root:
-
-```yaml
-max_iterations: 100
-timeout: 600
-direction: "improve test coverage"
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_SPRINTS` (via args) | `10` | Max conductor sprints |
+| `MAX_ITERATIONS` | `50` | Max iterations for loop.sh standalone mode |
+| `CC_TIMEOUT` | `900` | Timeout per CC invocation (seconds) |
+| `AUTONOMOUS_DIRECTION` | _(none)_ | Session focus (e.g., "fix auth bugs") |
+| `MAX_COST_USD` | _(none)_ | Stop when total cost exceeds this |
 
 ---
 
-## Stopping
+## Project Structure
 
-| Method | Behavior |
-|--------|----------|
-| **Ctrl+C** | Finishes current iteration, then exits |
-| **`--stop`** | Signals running session via sentinel file |
-| **Rate limit** | Auto-detects API limit, stops immediately |
-| **Auto** | Exits when all tasks done or budget hit |
+```
+autonomous-skill/
+├── SKILL.md                          # Conductor: multi-sprint orchestrator
+├── SPRINT.md                         # Sprint master: per-sprint execution
+├── CLAUDE.md                         # Project instructions for Claude
+├── OWNER.md.template                 # Persona template for manual config
+├── scripts/
+│   ├── conductor-state.sh            # State management (atomic writes, PID lock)
+│   ├── explore-scan.sh               # 8-dimension project scanner
+│   ├── persona.sh                    # OWNER.md auto-generation
+│   ├── loop.sh                       # Standalone launcher (outside CC)
+│   ├── master-poll.sh                # Manual master polling for comms.json
+│   └── master-watch.sh               # Dual-channel monitor (comms + JSONL)
+├── tests/
+│   ├── test_helpers.sh               # Shared test framework (assertions, temp dirs)
+│   ├── test_conductor.sh             # 79 tests: state, phase transitions, exploration
+│   ├── test_comms.sh                 # 26 tests: comms.json protocol
+│   ├── test_persona.sh               # 15 tests: OWNER.md generation
+│   ├── test_explore_scan.sh          # 39 tests: dimension scoring heuristics
+│   ├── test_loop.sh                  # 12 tests: standalone launcher
+│   └── claude                        # Mock CC binary for testing
+├── .claude/skills/
+│   ├── test-worker/SKILL.md          # Spawns worker + auto-answering master
+│   ├── capture-worker/SKILL.md       # Capture worker JSONL for inspection
+│   ├── diff-sessions/SKILL.md        # Compare two sessions side-by-side
+│   ├── clean-sandbox/SKILL.md        # Reset test sandbox
+│   └── clean-gstack/SKILL.md         # Delete gstack design doc archives
+└── README.md
+```
+
+**Generated at runtime** (gitignored):
+- `OWNER.md` — your persona, auto-generated from git + docs
+- `.autonomous/conductor-state.json` — multi-sprint state machine
+- `.autonomous/comms.json` — worker↔master IPC
+- `.autonomous/sprint-summary.json` — per-sprint results
+
+---
+
+## Safety
+
+| Guard | How |
+|-------|-----|
+| **Branch isolation** | All work on `auto/session-*` branches. Never touches main. |
+| **Per-sprint branches** | Each sprint works on its own branch; merged on success, discarded on failure. |
+| **Permission mode** | Workers run with `--dangerously-skip-permissions` but excluded from dangerous workflows. |
+| **Excluded workflows** | `/ship`, `/land-and-deploy`, `/careful`, `/guard` are forbidden. |
+| **Timeout** | Each CC invocation capped at 15 min (configurable via `CC_TIMEOUT`). |
+| **Cost budget** | `MAX_COST_USD` env var stops the session when exceeded. |
+| **Graceful shutdown** | SIGINT + sentinel file for clean exit across all layers. |
+| **3-strike rule** | Same approach fails 3 times → stop and report. |
+| **Atomic state** | Conductor state uses tmp+mv writes, PID lock for concurrency safety. |
+
+---
+
+## Testing
+
+171 tests across 5 suites, all pure bash:
+
+```bash
+bash tests/test_conductor.sh    # 79 tests
+bash tests/test_comms.sh        # 26 tests
+bash tests/test_persona.sh      # 15 tests
+bash tests/test_explore_scan.sh # 39 tests
+bash tests/test_loop.sh         # 12 tests
+shellcheck scripts/*.sh         # lint all shell scripts
+```
+
+The test harness uses `tests/claude` (a mock CC binary) controlled by env vars:
+
+| Variable | Effect |
+|----------|--------|
+| `MOCK_CLAUDE_COST` | Reported cost per invocation |
+| `MOCK_CLAUDE_COMMIT=1` | Make a git commit during the mock run |
+| `MOCK_CLAUDE_DELAY` | Sleep N seconds (for timeout tests) |
+| `MOCK_CLAUDE_EXIT` | Exit code to return |
 
 ---
 
@@ -151,66 +255,6 @@ git checkout main && git merge auto/session-TIMESTAMP
 # Or cherry-pick specific commits
 git cherry-pick COMMIT_HASH
 ```
-
----
-
-## Project Structure
-
-```
-autonomous-skill/
-├── SKILL.md              # Claude Code skill entry point
-├── CLAUDE.md             # Project instructions for Claude
-├── OWNER.md.template     # Persona template
-├── scripts/
-│   ├── loop.sh           # Main autonomous loop
-│   ├── discover.sh       # Task discovery (4 sources)
-│   ├── persona.sh        # OWNER.md auto-generation
-│   ├── parallel.sh       # Worktree parallel execution
-│   ├── report.sh         # Session report generator
-│   └── status.sh         # Session status dashboard
-├── tests/
-│   └── test_loop.sh      # Integration tests
-└── README.md
-```
-
-**Generated at runtime** (gitignored):
-- `OWNER.md` — your persona, auto-generated from git + docs
-- `TRACE.md` — session history (commits, cost, duration)
-- `KANBAN.md` — todo/doing/done board
-- `TODOS.md` — task list with completion tracking
-
----
-
-## Safety
-
-| Guard | How |
-|-------|-----|
-| **Branch isolation** | All work on `auto/session-*` branches. Never touches main. |
-| **Excluded commands** | `/ship`, `/land-and-deploy`, `/careful`, `/guard` are forbidden. |
-| **Timeout** | Each CC invocation capped at 15 min (configurable). |
-| **Rate limit detection** | Auto-stops when API quota is exhausted. |
-| **Graceful shutdown** | Ctrl+C and sentinel files for clean exit. |
-
----
-
-## Session Metrics
-
-Every session ends with a dashboard:
-
-```
-═══════════════════════════════════════════════════
-  SESSION METRICS
-═══════════════════════════════════════════════════
-  Duration:      47m 12s
-  Iterations:    20
-  Commits:       18
-  Files changed: 13 files
-  Total cost:    $3.42
-  Avg cost/iter: $0.1710
-───────────────────────────────────────────────────
-```
-
-Session history tracked in `TRACE.md`. Run `scripts/report.sh` for analytics.
 
 ---
 

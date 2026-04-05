@@ -36,6 +36,8 @@ Conductor (SKILL.md, user's CC session)
 - `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
 - `OWNER.md.template` — Template for manual persona configuration
+- `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
+- `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
 
 ## How it works
 
@@ -85,10 +87,10 @@ The conductor tracks multi-sprint progress in `.autonomous/conductor-state.json`
 ## Testing
 
 ```bash
-bash tests/test_conductor.sh    # 70 tests: state management, phase transitions, exploration, input validation
+bash tests/test_conductor.sh    # 79 tests: state management, phase transitions, exploration, input validation
 bash tests/test_comms.sh        # 26 tests: comms.json protocol
 bash tests/test_persona.sh      # 15 tests: OWNER.md generation
-bash tests/test_explore_scan.sh # 31 tests: 8-dimension scoring heuristics, edge cases
+bash tests/test_explore_scan.sh # 39 tests: 8-dimension scoring heuristics, edge cases
 bash tests/test_loop.sh         # 12 tests: standalone launcher args, env vars, persona, error handling
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
