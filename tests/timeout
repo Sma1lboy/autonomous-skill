@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# macOS compatibility shim for GNU 'timeout' (not in macOS stock install).
+# If a real timeout binary exists in standard system paths, delegates to it.
+# This preserves timeout enforcement on Linux CI while making tests work on macOS.
+# Usage: timeout <seconds> <command> [args...]
+for _REAL in /usr/bin/timeout /usr/local/bin/timeout /opt/homebrew/bin/timeout /usr/local/opt/coreutils/libexec/gnubin/timeout; do
+  [ -x "$_REAL" ] && exec "$_REAL" "$@"
+done
+# No real timeout found (stock macOS) — drop the seconds arg and run directly.
+# NOTE: timeout behaviour is not tested on this platform.
+shift
+exec "$@"

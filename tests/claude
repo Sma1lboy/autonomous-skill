@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Mock Claude CLI binary for testing.
+# Drop tests/ into PATH before real claude to intercept calls.
+#
+# Environment controls:
+#   MOCK_CLAUDE_COST    Cost to report in JSON output (default: 0.01)
+#   MOCK_CLAUDE_DELAY   Sleep N seconds before responding (timeout tests)
+#   MOCK_CLAUDE_EXIT    Exit code to return (default: 0) — exits before output
+#   MOCK_CLAUDE_OUTPUT  Persona text for --output-format json responses
+
+[ -n "${MOCK_CLAUDE_DELAY:-}" ] && sleep "$MOCK_CLAUDE_DELAY"
+
+# Non-zero exit — bail before producing any output (simulates API/network error)
+if [ "${MOCK_CLAUDE_EXIT:-0}" != "0" ]; then
+  exit "$MOCK_CLAUDE_EXIT"
+fi
+
+# Parse --output-format from argv (ignore all other flags)
+OUTPUT_FORMAT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output-format) OUTPUT_FORMAT="${2:-}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+if [ "$OUTPUT_FORMAT" = "json" ]; then
+  # persona.sh extracts via: jq -r '.result // empty'
+  python3 - <<'PY'
+import json, os
+content = os.environ.get(
+    'MOCK_CLAUDE_OUTPUT',
+    '# Owner Persona\n\n## Priorities\nShip fast\n\n'
+    '## Style\nClean bash\n\n## Avoid\nBreaking tests\n\n'
+    '## Current focus\nTest coverage'
+)
+cost = float(os.environ.get('MOCK_CLAUDE_COST', '0.01'))
+print(json.dumps({'result': content, 'cost_usd': cost}))
+PY
+else
+  # stream-json: loop.sh only checks whether HEAD moved, not output content
+  echo '{"type":"result","subtype":"success"}'
+fi
