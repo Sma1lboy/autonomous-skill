@@ -42,6 +42,10 @@ MAX_POLLS="${MONITOR_MAX_POLLS:-225}"
 
 source "$(dirname "${BASH_SOURCE[0]}")/comms-lib.sh"
 
+# Signal handling: break out of poll loop on interrupt
+_MONITOR_INTERRUPTED=0
+trap '_MONITOR_INTERRUPTED=1' INT TERM
+
 SUMMARY_FILE="$PROJECT_DIR/.autonomous/sprint-$SPRINT_NUM-summary.json"
 GENERIC_FILE="$PROJECT_DIR/.autonomous/sprint-summary.json"
 COMMS_FILE="$PROJECT_DIR/.autonomous/comms.json"
@@ -160,6 +164,19 @@ while true; do
       echo "=== SPRINT $SPRINT_NUM PROCESS EXITED ==="
       break
     fi
+  fi
+
+  # Check if interrupted by signal
+  if [ "$_MONITOR_INTERRUPTED" -eq 1 ]; then
+    echo "=== SPRINT $SPRINT_NUM INTERRUPTED ==="
+    # Check for summary files one last time before exiting
+    if [ -f "$SUMMARY_FILE" ]; then
+      cat "$SUMMARY_FILE"
+    elif [ -f "$GENERIC_FILE" ]; then
+      cp "$GENERIC_FILE" "$SUMMARY_FILE"
+      cat "$SUMMARY_FILE"
+    fi
+    break
   fi
 
   sleep 8

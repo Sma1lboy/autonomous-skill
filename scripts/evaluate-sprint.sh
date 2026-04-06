@@ -44,10 +44,18 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
   exit 0
 fi
 
+source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
+
 PROJECT_DIR="${1:?Usage: evaluate-sprint.sh <project_dir> <script_dir> <sprint_num>}"
 SCRIPT_DIR="${2:?Usage: evaluate-sprint.sh <project_dir> <script_dir> <sprint_num>}"
 SPRINT_NUM="${3:?Usage: evaluate-sprint.sh <project_dir> <script_dir> <sprint_num>}"
 LAST_COMMIT="${4:-}"
+
+log_init "$PROJECT_DIR"
+log_info "Evaluating sprint $SPRINT_NUM"
+
+# Clean up any tmp files on exit
+trap 'rm -f "$PROJECT_DIR/.autonomous/sprint-summary.json.tmp" 2>/dev/null || true' EXIT
 
 cd "$PROJECT_DIR"
 
@@ -123,11 +131,14 @@ else
   # Exit code 1 means tests failed; quality-gate.sh exits 0 for "no test command"
   # so we only get here when tests actually ran and failed
   QG_PASSED="false"
+  log_warn "Quality gate failed for sprint $SPRINT_NUM"
   SUMMARY="$SUMMARY [QUALITY GATE FAILED]"
 fi
 
 # Update conductor state
 PHASE=$(bash "$SCRIPT_DIR/scripts/conductor-state.sh" sprint-end "$PROJECT_DIR" "$STATUS" "$SUMMARY" "$COMMITS" "$DIR_COMPLETE" "$QG_PASSED")
+
+log_info "Sprint $SPRINT_NUM result: status=$STATUS phase=$PHASE qg=$QG_PASSED"
 
 echo "STATUS=$STATUS"
 echo "SUMMARY=$SUMMARY"

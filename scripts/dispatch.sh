@@ -37,6 +37,17 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
   exit 0
 fi
 
+source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
+
+# Clean up wrapper script if dispatch fails before launch
+_dispatch_launched=0
+_dispatch_cleanup() {
+  if [ "$_dispatch_launched" -eq 0 ]; then
+    [ -n "${WRAPPER:-}" ] && [ -f "${WRAPPER:-}" ] && rm -f "$WRAPPER" 2>/dev/null || true
+  fi
+}
+trap _dispatch_cleanup EXIT
+
 command -v claude &>/dev/null || { echo "ERROR: claude CLI not found. Install from https://docs.anthropic.com/en/docs/claude-code" >&2; exit 1; }
 
 PROJECT_DIR="${1:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
@@ -44,7 +55,10 @@ PROMPT_FILE="${2:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [
 WINDOW_NAME="${3:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
 WORKER_ID="${4:-}"
 
+log_init "$PROJECT_DIR"
+
 if [ ! -f "$PROMPT_FILE" ]; then
+  log_error "Prompt file not found: $PROMPT_FILE"
   echo "ERROR: Prompt file not found: $PROMPT_FILE. Check the path or ensure the sprint master wrote this file" >&2
   exit 1
 fi
@@ -171,11 +185,16 @@ WRAPPER="$PROJECT_DIR/.autonomous/run-${SAFE_WINDOW_NAME}.sh"
 chmod +x "$WRAPPER"
 
 # Dispatch in tmux (visible to user) or headless background
+log_info "Dispatching worker '$SAFE_WINDOW_NAME' isolation=$DISPATCH_ISOLATION timeout=${WORKER_TIMEOUT_SECS}s"
+
+_dispatch_launched=1
+
 if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
   tmux new-window -n "$SAFE_WINDOW_NAME" "bash $WRAPPER"
   echo "$SAFE_WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
   echo "DISPATCH_MODE=tmux"
   echo "Launched in tmux window '$SAFE_WINDOW_NAME'"
+  log_info "Dispatched in tmux mode window='$SAFE_WINDOW_NAME'"
 else
   bash "$WRAPPER" > "$PROJECT_DIR/.autonomous/${SAFE_WINDOW_NAME}-output.log" 2>&1 &
   DISPATCH_PID=$!
@@ -183,4 +202,5 @@ else
   echo "DISPATCH_MODE=headless"
   echo "DISPATCH_PID=$DISPATCH_PID"
   echo "PID: $DISPATCH_PID"
+  log_info "Dispatched in headless mode pid=$DISPATCH_PID"
 fi

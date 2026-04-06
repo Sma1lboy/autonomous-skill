@@ -41,6 +41,13 @@ ITERATIONS="${4:-1}"
 DIR_COMPLETE="${5:-true}"
 SPRINT_NUM="${6:-}"
 
+source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
+
+# Clean up tmp file on exit
+trap 'rm -f "$PROJECT_DIR/.autonomous/sprint-summary.json.tmp" 2>/dev/null || true' EXIT
+
+log_init "$PROJECT_DIR"
+
 cd "$PROJECT_DIR"
 
 if ! python3 -c "
@@ -64,6 +71,7 @@ import os; os.replace(tmp, '.autonomous/sprint-summary.json')
 print(json.dumps(summary, indent=2))
 " "$STATUS" "$SUMMARY" "$ITERATIONS" "$DIR_COMPLETE"; then
   # python3 failed — write minimal fallback so conductor doesn't hang forever
+  log_error "python3 failed in write-summary.sh — writing fallback summary"
   echo "WARNING: write-summary.sh python3 failed — check that python3 is installed and working (try: python3 --version). Writing fallback summary" >&2
   mkdir -p .autonomous
   cat > .autonomous/sprint-summary.json.tmp << FALLBACK_EOF
@@ -71,6 +79,8 @@ print(json.dumps(summary, indent=2))
 FALLBACK_EOF
   mv -f .autonomous/sprint-summary.json.tmp .autonomous/sprint-summary.json
 fi
+
+log_info "Sprint summary written: status=$STATUS"
 
 # Archive comms.json for this sprint
 if [ -n "$SPRINT_NUM" ] && [ -f "$PROJECT_DIR/.autonomous/comms.json" ]; then

@@ -112,6 +112,8 @@ trap cleanup EXIT
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
+log_init "$PROJECT"
 
 # Atomic write: write to tmp, verify, then mv
 atomic_write() {
@@ -185,6 +187,7 @@ acquire_lock() {
       die "Another conductor is running (PID $lock_pid). Lock: $LOCK_DIR. To force-release: bash scripts/conductor-state.sh unlock $PROJECT"
     fi
     # Stale lock, break it and re-acquire
+    log_warn "Breaking stale conductor lock (PID ${lock_pid:-unknown} not running)"
     rm -rf "$LOCK_DIR" 2>/dev/null || true
     mkdir "$LOCK_DIR" 2>/dev/null || die "Cannot acquire conductor lock. Check permissions on $STATE_DIR/conductor.lock"
   fi
@@ -251,6 +254,7 @@ print(json.dumps(d))
 " "$session_id" "$mission" "$max_sprints" "$max_directed")
 
   write_state "$state"
+  log_info "Conductor initialized: session=$session_id mission='$mission' max_sprints=$max_sprints"
   echo "$session_id"
 }
 
@@ -282,8 +286,10 @@ print(json.dumps(d))
 " "$state" "$direction")
 
   write_state "$updated"
-  # Print sprint number
-  echo "$updated" | jq '.sprints | length'
+  local sprint_num
+  sprint_num=$(echo "$updated" | jq '.sprints | length')
+  log_info "Sprint $sprint_num started: direction='$direction'"
+  echo "$sprint_num"
 }
 
 cmd_sprint_end() {
@@ -364,8 +370,10 @@ print(json.dumps(d))
 
   write_state "$updated"
 
-  # Print current phase
-  echo "$updated" | jq -r '.phase'
+  local phase
+  phase=$(echo "$updated" | jq -r '.phase')
+  log_info "Sprint ended: status=$status phase=$phase"
+  echo "$phase"
 }
 
 cmd_phase() {

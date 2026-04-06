@@ -49,6 +49,7 @@ fi
 MAX_POLLS="${MONITOR_MAX_POLLS:-225}"
 
 source "$(dirname "${BASH_SOURCE[0]}")/comms-lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/log.sh"
 
 PROJECT_DIR="${1:?Usage: monitor-worker.sh <project_dir> [window_name] [worker_pid] [worker-id]}"
 
@@ -101,6 +102,10 @@ if [ "${2:-}" = "--all" ]; then
   done
 fi
 
+# Signal handling (single-worker mode only): output WORKER_DONE on interrupt
+# so sprint master doesn't hang. Not needed in --all mode which has its own timeout.
+trap 'echo "=== MONITOR INTERRUPTED ==="; echo "WORKER_DONE"; exit 0' INT TERM
+
 WINDOW_NAME="${2:-worker}"
 WORKER_PID="${3:-}"
 WORKER_ID="${4:-}"
@@ -111,6 +116,9 @@ if [ -n "$WORKER_ID" ]; then
 else
   COMMS_FILE="$PROJECT_DIR/.autonomous/comms.json"
 fi
+
+log_init "$PROJECT_DIR"
+log_info "Monitoring worker window='${WINDOW_NAME}' pid='${WORKER_PID:-none}' id='${WORKER_ID:-none}'"
 
 _LAST_COMMIT=$(cd "$PROJECT_DIR" && git log --oneline -1 2>/dev/null || echo "")
 _POLL_COUNT=0
@@ -129,6 +137,7 @@ while true; do
 
   if [ "$STATUS" = "CORRUPT" ]; then
     ((_CORRUPT_STREAK++)) || true
+    log_warn "Corrupt comms file: $COMMS_FILE (streak: $_CORRUPT_STREAK)"
     echo "WARNING: corrupt comms file: $COMMS_FILE (streak: $_CORRUPT_STREAK). Expected valid JSON with {\"status\":\"idle\"|\"waiting\"|\"done\"}. To reset: echo '{\"status\":\"idle\"}' > $COMMS_FILE" >&2
     if [ "$_CORRUPT_STREAK" -ge 3 ]; then
       echo "=== COMMS: CORRUPT JSON (3 consecutive) ==="
@@ -139,6 +148,7 @@ while true; do
     _CORRUPT_STREAK=0
 
     if [ "$STATUS" = "done" ]; then
+      log_info "Worker done"
       echo "=== WORKER DONE ==="
       jq '.' "$COMMS_FILE" 2>/dev/null
       echo "WORKER_DONE"
@@ -146,6 +156,7 @@ while true; do
     fi
 
     if [ "$STATUS" = "waiting" ]; then
+      log_info "Worker asking a question"
       echo "=== COMMS: WORKER ASKING ==="
       jq '.' "$COMMS_FILE" 2>/dev/null
       echo "WORKER_ASKING"
