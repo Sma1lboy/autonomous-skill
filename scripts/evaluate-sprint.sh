@@ -95,11 +95,23 @@ else
   DIR_COMPLETE="false"
 fi
 
+# Run quality gate (non-blocking — failure is recorded but doesn't stop evaluation)
+QG_PASSED=""
+if bash "$SCRIPT_DIR/scripts/quality-gate.sh" "$PROJECT_DIR" >/dev/null 2>&1; then
+  QG_PASSED="true"
+else
+  # Exit code 1 means tests failed; quality-gate.sh exits 0 for "no test command"
+  # so we only get here when tests actually ran and failed
+  QG_PASSED="false"
+  SUMMARY="$SUMMARY [QUALITY GATE FAILED]"
+fi
+
 # Update conductor state
-PHASE=$(bash "$SCRIPT_DIR/scripts/conductor-state.sh" sprint-end "$PROJECT_DIR" "$STATUS" "$SUMMARY" "$COMMITS" "$DIR_COMPLETE")
+PHASE=$(bash "$SCRIPT_DIR/scripts/conductor-state.sh" sprint-end "$PROJECT_DIR" "$STATUS" "$SUMMARY" "$COMMITS" "$DIR_COMPLETE" "$QG_PASSED")
 
 echo "STATUS=$STATUS"
 echo "SUMMARY=$SUMMARY"
 echo "DIR_COMPLETE=$DIR_COMPLETE"
 echo "PHASE=$PHASE"
+echo "QG_PASSED=$QG_PASSED"
 echo "Phase after sprint $SPRINT_NUM: $PHASE" >&2

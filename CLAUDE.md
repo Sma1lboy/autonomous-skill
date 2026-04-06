@@ -60,6 +60,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/detect-framework.sh` — Auto-detect project framework/stack from marker files (package.json, Cargo.toml, go.mod, etc.)
 - `scripts/build-worker-hints.sh` — Build worker hints block from detection + optional `.autonomous/skill-config.json` overrides
 - `scripts/cleanup-workers.sh` — Kill registered tmux worker windows (shared by write-summary + evaluate-sprint)
+- `scripts/quality-gate.sh` — Automated build/test verification after sprint merge (uses detect-framework.sh, supports skill-config.json override)
 
 #### Skills
 
@@ -151,6 +152,7 @@ bash tests/test_merge_sprint.sh       # 25 tests: merge/discard logic, branch cl
 bash tests/test_evaluate_sprint.sh    # 24 tests: summary reading, state updates
 bash tests/test_conversations.sh      # 56 tests: comms round-trip, cross-attention quality
 bash tests/test_error_handling.sh     # 33 tests: corrupt JSON, atomic writes, monitor timeouts
+bash tests/test_quality_gate.sh      # 56 tests: quality gate verification, framework detection, config override, integration
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 

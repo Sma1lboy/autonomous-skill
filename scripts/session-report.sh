@@ -196,14 +196,16 @@ project_dir = sys.argv[1]
 state_file = sys.argv[2]
 sprint_count = int(sys.argv[3])
 
-# Load conductor state for directions
+# Load conductor state for directions and quality gate results
 directions = {}
+qg_results = {}
 if os.path.isfile(state_file):
     try:
         with open(state_file) as f:
             state = json.load(f)
         for s in state.get('sprints', []):
             directions[s.get('number', 0)] = s.get('direction', 'unknown')
+            qg_results[s.get('number', 0)] = s.get('quality_gate_passed', None)
     except Exception:
         pass
 
@@ -223,6 +225,7 @@ for n in range(1, sprint_count + 1):
     commits = data.get('commits', [])
     summary = data.get('summary', '')
     direction = directions.get(n, 'unknown')
+    qg_passed = qg_results.get(n, None)
     commit_count = len(commits)
     total_commits += commit_count
 
@@ -263,7 +266,8 @@ for n in range(1, sprint_count + 1):
         'files_changed': files_changed,
         'files_list': sorted(files_set),
         'summary': summary,
-        'rating': rating
+        'rating': rating,
+        'quality_gate_passed': qg_passed
     })
 
 result = {
@@ -312,6 +316,13 @@ s = sprints[n - 1]
 print(f'Sprint {s[\"number\"]}')
 print(f'  Direction: {s[\"direction\"]}')
 print(f'  Status:    {s[\"status\"]}')
+qg = s.get('quality_gate_passed')
+if qg is True:
+    print(f'  Quality:   pass')
+elif qg is False:
+    print(f'  Quality:   FAIL')
+else:
+    print(f'  Quality:   not run')
 print(f'  Rating:    {s[\"rating\"]}', end='')
 if s['rating'] == 'recommended':
     print(' (complete with commits)')
@@ -344,15 +355,23 @@ data = json.loads(sys.argv[1])
 sprints = data['sprints']
 totals = data['totals']
 
+def qg_label(val):
+    if val is True:
+        return 'pass'
+    elif val is False:
+        return 'fail'
+    return '—'
+
 # Header
-print(f'{\"Sprint\":<7} | {\"Status\":<10} | {\"Commits\":<7} | {\"Rating\":<11} | Summary')
-print(f'{\"-\"*7}+{\"-\"*12}+{\"-\"*9}+{\"-\"*13}+{\"-\"*30}')
+print(f'{\"Sprint\":<7} | {\"Status\":<10} | {\"Commits\":<7} | {\"QG\":<4} | {\"Rating\":<11} | Summary')
+print(f'{\"-\"*7}+{\"-\"*12}+{\"-\"*9}+{\"-\"*6}+{\"-\"*13}+{\"-\"*30}')
 
 for s in sprints:
     summary = s['summary']
     if len(summary) > 60:
         summary = summary[:57] + '...'
-    print(f'{s[\"number\"]:<7} | {s[\"status\"]:<10} | {s[\"commit_count\"]:<7} | {s[\"rating\"]:<11} | {summary}')
+    qg = qg_label(s.get('quality_gate_passed'))
+    print(f'{s[\"number\"]:<7} | {s[\"status\"]:<10} | {s[\"commit_count\"]:<7} | {qg:<4} | {s[\"rating\"]:<11} | {summary}')
 
 print()
 print(f'Total: {totals[\"sprints\"]} sprints, {totals[\"commits\"]} commits, {totals[\"files_changed\"]} files changed')

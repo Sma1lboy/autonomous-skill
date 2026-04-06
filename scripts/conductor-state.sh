@@ -22,8 +22,9 @@ Commands:
   sprint-start <project-dir> <direction>
       Register a new sprint with the given direction
 
-  sprint-end <project-dir> <status> <summary> [commits-json] [direction-complete]
+  sprint-end <project-dir> <status> <summary> [commits-json] [direction-complete] [quality-gate]
       Complete the current sprint, update counters, evaluate phase transition
+      quality-gate: "true", "false", or "" (not run)
 
   phase <project-dir>
       Print current phase ("directed" or "exploring")
@@ -273,8 +274,9 @@ cmd_sprint_end() {
   local summary="${4:-}"
   local commits_json="${5:-[]}"
   local direction_complete="${6:-false}"
+  local quality_gate="${7:-}"
 
-  [ -z "$status" ] && die "Usage: conductor-state.sh sprint-end <project-dir> <status> <summary> [commits-json] [direction-complete]"
+  [ -z "$status" ] && die "Usage: conductor-state.sh sprint-end <project-dir> <status> <summary> [commits-json] [direction-complete] [quality-gate]"
 
   local state
   state=$(read_state_strict) || die "No conductor state found."
@@ -288,6 +290,15 @@ status = sys.argv[2]
 summary = sys.argv[3]
 commits = json.loads(sys.argv[4])
 direction_complete = sys.argv[5].lower() == 'true'
+qg_raw = sys.argv[6]
+
+# Parse quality gate: 'true' -> True, 'false' -> False, '' -> None
+if qg_raw.lower() == 'true':
+    quality_gate = True
+elif qg_raw.lower() == 'false':
+    quality_gate = False
+else:
+    quality_gate = None
 
 sprints = d.get('sprints', [])
 if not sprints:
@@ -299,6 +310,7 @@ sprints[-1]['status'] = status
 sprints[-1]['summary'] = summary
 sprints[-1]['commits'] = commits
 sprints[-1]['direction_complete'] = direction_complete
+sprints[-1]['quality_gate_passed'] = quality_gate
 
 # Update counters
 if direction_complete:
@@ -330,7 +342,7 @@ if d.get('phase') == 'directed':
         d['phase_transition_reason'] = 'consecutive_zero_commits'
 
 print(json.dumps(d))
-" "$state" "$status" "$summary" "$commits_json" "$direction_complete")
+" "$state" "$status" "$summary" "$commits_json" "$direction_complete" "$quality_gate")
 
   write_state "$updated"
 
