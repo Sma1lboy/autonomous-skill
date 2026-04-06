@@ -111,6 +111,7 @@ extract_capabilities() {
   python3 -c "
 import sys, re, json
 
+max_cap = int(sys.argv[2])
 caps = []
 try:
     with open(sys.argv[1]) as f:
@@ -118,13 +119,13 @@ try:
             m = re.match(r'^#{2,}\s+(.+)', line.strip())
             if m:
                 cap = m.group(1).strip()
-                if cap and len(cap) < 100:
+                if cap and len(cap) < max_cap:
                     caps.append(cap)
 except FileNotFoundError:
     pass
 
 print(json.dumps(caps[:20]))
-" "$skill_file" 2>/dev/null || echo "[]"
+" "$skill_file" "$MAX_CAP_LENGTH" 2>/dev/null || echo "[]"
 }
 
 # Generate summary from first few lines of SKILL.md
@@ -133,6 +134,7 @@ auto_summary_from_content() {
   python3 -c "
 import sys, re
 
+max_len = int(sys.argv[2])
 lines = []
 try:
     with open(sys.argv[1]) as f:
@@ -150,11 +152,11 @@ except FileNotFoundError:
     pass
 
 if lines:
-    summary = ' '.join(lines)[:200]
+    summary = ' '.join(lines)[:max_len]
     print(summary)
 else:
     print('')
-" "$skill_file" 2>/dev/null || echo ""
+" "$skill_file" "$MAX_SUMMARY_LENGTH" 2>/dev/null || echo ""
 }
 
 # Generate summary using claude -p, with fallback

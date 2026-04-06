@@ -46,6 +46,13 @@ Commands:
       Record a rate limit event in the rate_limits array
       Appends {timestamp, context, attempt} to conductor-state.json
 
+  mark-parallel <project-dir> <sprint_nums_json>
+      Store a group of sprint numbers running in parallel
+      sprint_nums_json is a JSON array like [3,4,5]
+
+  get-parallel <project-dir>
+      Return the parallel_groups array as JSON
+
   lock <project-dir>
       Acquire PID lock (prevents concurrent conductors)
 
@@ -59,6 +66,8 @@ Examples:
   bash scripts/conductor-state.sh retry-mark ./my-project 3
   bash scripts/conductor-state.sh get-sprint ./my-project 2
   bash scripts/conductor-state.sh rate-limit ./my-project "sprint-3 dispatch"
+  bash scripts/conductor-state.sh mark-parallel ./my-project '[3,4,5]'
+  bash scripts/conductor-state.sh get-parallel ./my-project
   bash scripts/conductor-state.sh phase ./my-project
 EOF
   exit 0
@@ -232,6 +241,7 @@ d = {
     'sprints': [],
     'consecutive_complete': 0,
     'consecutive_zero_commits': 0,
+    'parallel_groups': [],
     'exploration': {
         'test_coverage': {'audited': False, 'score': None},
         'error_handling': {'audited': False, 'score': None},
@@ -566,6 +576,57 @@ cmd_unlock() {
   echo "unlocked"
 }
 
+cmd_mark_parallel() {
+  local sprint_nums_json="${3:-}"
+  [ -z "$sprint_nums_json" ] && die "Usage: conductor-state.sh mark-parallel <project-dir> <sprint_nums_json>"
+
+  # Validate input is a JSON array of integers
+  python3 -c "
+import json, sys
+try:
+    arr = json.loads(sys.argv[1])
+    assert isinstance(arr, list), 'not a list'
+    assert len(arr) > 0, 'empty list'
+    for x in arr:
+        assert isinstance(x, int), f'{x} is not an integer'
+except Exception as e:
+    print(f'ERROR: invalid sprint_nums_json: {e}', file=sys.stderr)
+    sys.exit(1)
+" "$sprint_nums_json" || die "sprint_nums_json must be a non-empty JSON array of integers, got: $sprint_nums_json"
+
+  local state
+  state=$(read_state_strict) || die "No conductor state found. Run 'init' first."
+
+  local updated
+  updated=$(python3 -c "
+import json, sys, time
+
+d = json.loads(sys.argv[1])
+sprint_nums = json.loads(sys.argv[2])
+
+d.setdefault('parallel_groups', []).append({
+    'sprint_nums': sprint_nums,
+    'started_at': time.strftime('%Y-%m-%dT%H:%M:%S')
+})
+
+print(json.dumps(d))
+" "$state" "$sprint_nums_json")
+
+  write_state "$updated"
+  echo "ok"
+}
+
+cmd_get_parallel() {
+  local state
+  state=$(read_state)
+
+  python3 -c "
+import json, sys
+d = json.loads(sys.argv[1])
+print(json.dumps(d.get('parallel_groups', [])))
+" "$state"
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────
 
 case "$CMD" in
@@ -581,5 +642,7 @@ case "$CMD" in
   retry-mark)    cmd_retry_mark "$@" ;;
   get-sprint)    cmd_get_sprint "$@" ;;
   rate-limit)    cmd_rate_limit "$@" ;;
-  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|progress|retry-mark|get-sprint|rate-limit|lock|unlock" ;;
+  mark-parallel) cmd_mark_parallel "$@" ;;
+  get-parallel)  cmd_get_parallel ;;
+  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|progress|retry-mark|get-sprint|rate-limit|mark-parallel|get-parallel|lock|unlock" ;;
 esac
