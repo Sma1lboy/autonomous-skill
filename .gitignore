@@ -16,3 +16,6 @@ COMPETITIVE.md
 /tmp/
 *.jsonl
 /ref/**
+
+# Runtime state (per-session, never committed)
+.autonomous/

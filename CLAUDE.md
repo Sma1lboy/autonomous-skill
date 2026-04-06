@@ -102,7 +102,7 @@ Cross-session persistent work queue in `.autonomous/backlog.json`:
 ## Testing
 
 ```bash
-bash tests/test_conductor.sh    # 87 tests: state management, phase transitions, exploration, input validation, CLI help
+bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
 bash tests/test_comms.sh        # 34 tests: comms.json protocol, master-watch/master-poll CLI help
 bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
 bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
