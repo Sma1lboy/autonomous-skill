@@ -35,6 +35,9 @@ assert_file_contains() {
 assert_file_not_contains() {
   grep -q "$2" "$1" 2>/dev/null && fail "$3 — '$2' unexpectedly in $1" || ok "$3"
 }
+assert_file_not_exists() {
+  [ ! -e "$1" ] && ok "$2" || fail "$2 — file exists: $1"
+}
 
 # ── Temp dir management ───────────────────────────────────────────────────────
 TMPDIRS=()

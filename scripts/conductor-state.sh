@@ -182,6 +182,9 @@ cmd_init() {
   [ "$max_sprints" -gt 0 ] || die "max-sprints must be > 0, got: $max_sprints"
 
   mkdir -p "$STATE_DIR"
+  # Clean stale sprint summaries from prior sessions
+  rm -f "$STATE_DIR/sprint-summary.json"
+  rm -f "$STATE_DIR"/sprint-*-summary.json
   acquire_lock
 
   local session_id="conductor-$(date +%s)"

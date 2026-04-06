@@ -901,4 +901,50 @@ echo "44. --help exits 0"
 bash "$CONDUCTOR" --help >/dev/null 2>&1
 assert_eq "$?" "0" "--help exits with code 0"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 45. init cleans stale sprint-summary.json
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "45. init cleans stale sprint-summary.json"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+echo '{"status":"complete","summary":"stale from prior session"}' > "$T/.autonomous/sprint-summary.json"
+echo '{"status":"complete","summary":"stale sprint 1"}' > "$T/.autonomous/sprint-1-summary.json"
+bash "$CONDUCTOR" init "$T" "fresh mission" 5 >/dev/null
+assert_file_not_exists "$T/.autonomous/sprint-summary.json" "stale sprint-summary.json removed"
+assert_file_not_exists "$T/.autonomous/sprint-1-summary.json" "stale sprint-1-summary.json removed"
+assert_file_exists "$T/.autonomous/conductor-state.json" "fresh conductor-state.json created"
+MISSION=$(python3 -c "import json; print(json.load(open('$T/.autonomous/conductor-state.json'))['mission'])")
+assert_eq "$MISSION" "fresh mission" "conductor-state has new mission"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 46. init preserves backlog.json
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "46. init preserves backlog.json"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+echo '{"items":[{"title":"keep me"}]}' > "$T/.autonomous/backlog.json"
+echo '{"status":"complete"}' > "$T/.autonomous/sprint-summary.json"
+bash "$CONDUCTOR" init "$T" "new session" 5 >/dev/null
+assert_file_exists "$T/.autonomous/backlog.json" "backlog.json preserved"
+TITLE=$(python3 -c "import json; print(json.load(open('$T/.autonomous/backlog.json'))['items'][0]['title'])")
+assert_eq "$TITLE" "keep me" "backlog content intact"
+assert_file_not_exists "$T/.autonomous/sprint-summary.json" "stale summary cleaned"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 47. init cleans all numbered summaries
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "47. init cleans all numbered summaries"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+for i in 1 2 3 4 5; do
+  echo "{\"status\":\"complete\",\"sprint\":$i}" > "$T/.autonomous/sprint-$i-summary.json"
+done
+bash "$CONDUCTOR" init "$T" "clean slate" 5 >/dev/null
+for i in 1 2 3 4 5; do
+  assert_file_not_exists "$T/.autonomous/sprint-$i-summary.json" "sprint-$i-summary.json removed"
+done
+
 print_results
