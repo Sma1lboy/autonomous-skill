@@ -42,6 +42,10 @@ Commands:
   get-sprint <project-dir> <sprint-num>
       Return a single sprint's data as JSON
 
+  rate-limit <project-dir> <context>
+      Record a rate limit event in the rate_limits array
+      Appends {timestamp, context, attempt} to conductor-state.json
+
   lock <project-dir>
       Acquire PID lock (prevents concurrent conductors)
 
@@ -54,6 +58,7 @@ Examples:
   bash scripts/conductor-state.sh sprint-start ./my-project "add auth middleware"
   bash scripts/conductor-state.sh retry-mark ./my-project 3
   bash scripts/conductor-state.sh get-sprint ./my-project 2
+  bash scripts/conductor-state.sh rate-limit ./my-project "sprint-3 dispatch"
   bash scripts/conductor-state.sh phase ./my-project
 EOF
   exit 0
@@ -483,6 +488,74 @@ print('{}')
 " "$state" "$sprint_num"
 }
 
+cmd_rate_limit() {
+  local context="${3:-}"
+  [ -z "$context" ] && die "Usage: conductor-state.sh rate-limit <project-dir> <context>"
+
+  local state
+  state=$(read_state)
+
+  local updated
+  updated=$(python3 -c "
+import json, sys, time
+
+d = json.loads(sys.argv[1])
+context = sys.argv[2]
+
+if 'rate_limits' not in d:
+    d['rate_limits'] = []
+
+# Count existing events for this context to determine attempt number
+attempt = sum(1 for e in d['rate_limits'] if e.get('context') == context) + 1
+
+d['rate_limits'].append({
+    'timestamp': time.strftime('%Y-%m-%dT%H:%M:%S'),
+    'context': context,
+    'attempt': attempt
+})
+
+print(json.dumps(d))
+" "$state" "$context")
+
+  write_state "$updated"
+  echo "recorded"
+}
+
+cmd_progress() {
+  local state
+  state=$(read_state)
+
+  python3 -c "
+import json, sys
+
+d = json.loads(sys.argv[1])
+if not d or 'phase' not in d:
+    print('No active session')
+    sys.exit(0)
+
+sprints = d.get('sprints', [])
+max_sprints = d.get('max_sprints', 0)
+phase = d.get('phase', 'unknown')
+current = len(sprints)
+total_commits = sum(len(s.get('commits', [])) for s in sprints)
+
+# Last sprint summary (truncated)
+last_summary = ''
+for s in reversed(sprints):
+    if s.get('summary', ''):
+        last_summary = s['summary']
+        break
+
+if len(last_summary) > 50:
+    last_summary = last_summary[:47] + '...'
+
+if last_summary:
+    print(f'Sprint {current}/{max_sprints} | {phase} | {total_commits} commits | last: {last_summary}')
+else:
+    print(f'Sprint {current}/{max_sprints} | {phase} | {total_commits} commits')
+" "$state"
+}
+
 cmd_lock() {
   acquire_lock
   echo "locked (PID $$)"
@@ -507,5 +580,6 @@ case "$CMD" in
   unlock)        cmd_unlock ;;
   retry-mark)    cmd_retry_mark "$@" ;;
   get-sprint)    cmd_get_sprint "$@" ;;
-  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|retry-mark|get-sprint|lock|unlock" ;;
+  rate-limit)    cmd_rate_limit "$@" ;;
+  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|progress|retry-mark|get-sprint|rate-limit|lock|unlock" ;;
 esac
