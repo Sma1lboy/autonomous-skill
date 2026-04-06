@@ -40,6 +40,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
 - `scripts/monitor-sprint.sh` — Poll for sprint completion via summary file + tmux liveness
 - `scripts/retry-strategy.sh` — Analyze sprint failures, suggest retry directions (3-strike rule)
+- `scripts/rate-limiter.sh` — Rate limit detection and exponential backoff for dispatch retries (check, wait, record, report)
 
 #### Sprint master layer scripts (used by SPRINT.md)
 
@@ -67,6 +68,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/shutdown.sh` — Graceful shutdown propagation: C-c to tmux workers, wait, force-kill survivors, write shutdown-reason.json
 - `scripts/session-diff.sh` — Session diff summary: compare auto/ branch against base, with commit categorization and PR description
 - `scripts/history.sh` — Sprint history viewer: list all auto/ branches with session metadata, detail, compare, JSON output
+- `scripts/test-stability.sh` — Flaky test detection: run tests N times, identify inconsistent pass/fail, static analysis for flakiness patterns
 
 #### Skills
 
@@ -168,6 +170,8 @@ bash tests/test_session_diff.sh      # 79 tests: diff summary, commit categoriza
 bash tests/test_retry_strategy.sh    # 60 tests: retry analysis, 3-strike rule, adjusted direction, retry-mark, get-sprint, count, edge cases
 bash tests/test_dispatch_timeout.sh  # 28 tests: worker timeout enforcement, env/config override, timeout exit handling, monitor detection
 bash tests/test_history.sh           # 113 tests: history viewer listing, detail, compare, JSON, graceful handling, edge cases
+bash tests/test_rate_limiter.sh      # 62 tests: rate limit detection, backoff calculation, recording, reporting, session-report integration
+bash tests/test_stability.sh         # 53 tests: flaky test detection, JSON output, fix mode pattern analysis, real suite validation
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 

@@ -305,6 +305,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── JSON mode ────────────────────────────────────────────────────────────
 
+# ── Load rate limits from conductor state ────────────────────────────────
+
+RATE_LIMITS_JSON="[]"
+if [ -f "$CONDUCTOR_STATE" ]; then
+  RATE_LIMITS_JSON=$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    rl = d.get('rate_limits', [])
+    print(json.dumps(rl))
+except Exception:
+    print('[]')
+" "$CONDUCTOR_STATE" 2>/dev/null || echo "[]")
+fi
+
 if [ "$JSON_MODE" = true ]; then
   if [ "$DIFF_MODE" = true ]; then
     DIFF_JSON=$(bash "$SCRIPT_DIR/session-diff.sh" "$PROJECT_DIR" --json 2>/dev/null || echo '{}')
@@ -317,8 +333,9 @@ try:
     data['diff'] = json.loads(sys.argv[2])
 except Exception:
     data['diff'] = {}
+data['rate_limits'] = json.loads(sys.argv[3])
 print(json.dumps(data, indent=2))
-" "$DATA" "$DIFF_JSON"
+" "$DATA" "$DIFF_JSON" "$RATE_LIMITS_JSON"
   else
     # Output clean JSON (without files_list in sprint objects)
     python3 -c "
@@ -326,8 +343,9 @@ import json, sys
 data = json.loads(sys.argv[1])
 for s in data['sprints']:
     s.pop('files_list', None)
+data['rate_limits'] = json.loads(sys.argv[2])
 print(json.dumps(data, indent=2))
-" "$DATA"
+" "$DATA" "$RATE_LIMITS_JSON"
   fi
   exit 0
 fi
@@ -415,7 +433,14 @@ session_cost = totals.get('session_cost_usd', 0)
 cost_line = ', \$' + f'{session_cost:.2f} cost' if session_cost else ''
 print()
 print(f'Total: {totals[\"sprints\"]} sprints, {totals[\"commits\"]} commits, {totals[\"files_changed\"]} files changed{cost_line}')
-" "$DATA"
+
+import json as _json
+rl = _json.loads(sys.argv[2])
+if rl:
+    first = rl[0].get('timestamp', 'unknown')
+    last = rl[-1].get('timestamp', 'unknown')
+    print(f'Rate limits: {len(rl)} events (first: {first}, last: {last})')
+" "$DATA" "$RATE_LIMITS_JSON"
 
 # ── Append diff summary (text/table mode only) ─────────────────────────
 
