@@ -5,43 +5,71 @@ finding and fixing issues in any codebase.
 
 ## Architecture
 
-- `SKILL.md` — Main autonomous skill entry point (master/owner role)
-- `.claude/skills/test-worker/SKILL.md` — Test skill: spawns worker + auto-answering master for DiskClean pipeline
+Three-layer hierarchy: Conductor -> Sprint Master -> Worker.
+
+```
+Conductor (SKILL.md, user's CC session)
+  |-- Plans sprint directions (directed phase or exploration phase)
+  |-- Dispatches sprint master via claude -p in tmux (context isolation)
+  |-- Evaluates sprint results, manages phase transitions
+  |
+  └── Sprint Master (SPRINT.md, separate claude -p session)
+        |-- Sense -> Direct -> Respond -> Summarize loop
+        |-- Dispatches workers via tmux / headless claude -p
+        |-- Answers worker questions via comms.json protocol
+        |
+        └── Worker (full Claude session with all tools)
+```
+
+### Key Files
+
+- `SKILL.md` — Conductor: multi-sprint orchestrator, phase management, exploration strategy
+- `SPRINT.md` — Sprint master: per-sprint execution (Sense->Direct->Respond->Summarize)
+- `scripts/conductor-state.sh` — Conductor state management (atomic writes, PID lock, phase transitions)
+- `scripts/persona.sh` — OWNER.md auto-generation from git history + project docs
+- `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
+- `scripts/master-poll.sh` — Manual master polling for comms.json
+- `scripts/master-watch.sh` — Dual-channel monitor (comms + session JSONL)
+- `.claude/skills/test-worker/SKILL.md` — Test skill: spawns worker + auto-answering master
 - `.claude/skills/clean-sandbox/SKILL.md` — Reset test sandbox
 - `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
-- `scripts/loop.sh` — Main autonomous loop (bash while-loop, spawns fresh CC per iteration)
-- `scripts/discover.sh` — Task discovery from TODOS.md, KANBAN.md, TODO comments, GitHub issues
-- `scripts/report.sh` — Parse autonomous-log.jsonl into human-readable summary (or `--json`)
-- `scripts/status.sh` — Quick session status dashboard (branch stats, cost, sentinel state; `--json`)
-- `scripts/parallel.sh` — Worktree-based parallel execution (N workers per iteration)
-- `scripts/persona.sh` — OWNER.md auto-generation from git history + project docs
 - `OWNER.md.template` — Template for manual persona configuration
-- `TRACE.md` — Auto-maintained session history (commits, cost, duration per session)
-- `KANBAN.md` — Project board (Todo/Doing/Done), also used as task source by discover.sh
 
 ## How it works
 
-1. User invokes `/autonomous-skill` in a git repo
+1. User invokes `/autonomous-skill` in a git repo (e.g., `/autonomous-skill 5 build REST API`)
 2. persona.sh generates OWNER.md if missing (from git log + CLAUDE.md + README.md)
-3. discover.sh finds tasks (TODOS.md, code TODOs, GitHub issues)
-4. loop.sh creates `auto/session-TIMESTAMP` branch and iterates:
-   - **Serial mode** (default): picks one task, spawns `claude -p`
-   - **Parallel mode** (`--parallel N`): picks N tasks, creates N git worktrees,
-     spawns N `claude -p` concurrently, cherry-picks results back to session branch
-   - Verifies result (runs tests if available)
-   - Commits on success, rolls back on failure
-   - 3-strike rule: skip task after 3 failures
-5. Logs cost and progress to ~/.autonomous-skill/projects/SLUG/autonomous-log.jsonl
-6. At session end, appends entry to TRACE.md with commits, cost, and duration
+3. Conductor (SKILL.md) talks to user to understand the mission (Discovery phase)
+4. Conductor creates `auto/session-TIMESTAMP` branch and initializes conductor-state.json
+5. **Conductor loop** (Plan -> Dispatch -> Monitor -> Evaluate -> Repeat):
+   - **Directed phase**: breaks user's mission into sprint-sized tasks
+   - Each sprint: `claude -p` runs SPRINT.md with a focused direction
+   - Sprint master dispatches workers, answers questions via comms.json
+   - Conductor reads sprint-summary.json, updates state, evaluates phase transition
+   - **Phase transition**: when direction is complete (2 consecutive signals + commits,
+     or max_directed_sprints reached, or 2 consecutive zero-commit sprints)
+   - **Exploration phase**: picks weakest project dimension (test coverage, security,
+     code quality, etc.) and generates exploration sprint directions
+6. Session ends when all sprints used up or project feels solid
 
 ## Comms Protocol
 
-Workers use `{project}/.autonomous/comms.md` for interactive skill questions:
-- Worker writes `STATUS: WAITING` + question → polls for answer
-- Master writes `STATUS: ANSWERED` + answer → worker continues
+Workers use `{project}/.autonomous/comms.json` for interactive skill questions:
+- Worker writes `{"status":"waiting","questions":[...]}` -> polls for answer
+- Master writes `{"status":"answered","answers":[...]}` -> worker continues
 - Replaces AskUserQuestion which is unavailable in subagent context
+- Valid statuses: "idle", "waiting", "answered", "done"
 - Validated: 20+ rounds per session, cross-attention quality preserved
+
+## Conductor State
+
+The conductor tracks multi-sprint progress in `.autonomous/conductor-state.json`:
+- Phase: "directed" (executing user's mission) or "exploring" (autonomous improvement)
+- Sprint history: direction, status, commits, summary per sprint
+- Phase transition decision tree (see SKILL.md)
+- Exploration dimensions with audit status and scores
+- Atomic writes (tmp+mv), PID lock for concurrency safety
 
 ## Safety
 
@@ -56,8 +84,9 @@ Workers use `{project}/.autonomous/comms.md` for interactive skill questions:
 ## Testing
 
 ```bash
-bash tests/test_loop.sh     # 100+ integration tests (mock CC, no API calls)
-shellcheck scripts/*.sh     # lint all shell scripts
+bash tests/test_conductor.sh  # 38 tests: state management, phase transitions, exploration
+bash tests/test_comms.sh      # 26 tests: comms.json protocol
+shellcheck scripts/*.sh       # lint all shell scripts
 ```
 
 Test harness uses `tests/claude` (mock CC binary) controlled by env vars:
