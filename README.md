@@ -30,9 +30,11 @@ Drop it into any git repo, run `/autonomous-skill`, go to sleep.
 
 ## Install — 30 seconds
 
-Requirements: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Git
+Requirements: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Git, Bash 4+
 
-Open Claude Code and paste this. Claude does the rest.
+Optional but recommended: [gstack](https://github.com/garrytan/gstack) (for better performance), [tmux](https://github.com/tmux/tmux) (visible worker windows), [jq](https://jqlang.github.io/jq/) (persona generation)
+
+Open Claude Code and paste this. Claude does the rest:
 
 ```
 Install autonomous-skill: run git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill then add an "autonomous-skill" section to CLAUDE.md that says this is a self-driving project agent — run /autonomous-skill to start an autonomous session that creates an auto/ branch and continuously finds and fixes issues. Usage: /autonomous-skill [sprint_count] [direction]. Examples: /autonomous-skill (explore mode, 10 sprints), /autonomous-skill 5 build REST API, /autonomous-skill unlimited. List the helper skills: /test-worker, /clean-sandbox, /capture-worker, /diff-sessions. Mention that all changes happen on auto/ branches (never main), with --dangerously-skip-permissions and 15-minute timeout per sprint. Then ask the user if they want to try it now on the current project.
@@ -41,14 +43,10 @@ Install autonomous-skill: run git clone --single-branch --depth 1 https://github
 Or install manually:
 
 ```bash
-# 1. Clone
 git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill
-
-# 2. In any git repo, open Claude Code and run:
-/autonomous-skill
 ```
 
-That's it. It creates an `auto/session-*` branch and starts working.
+Then in any git repo, open Claude Code and run `/autonomous-skill`. It creates an `auto/session-*` branch and starts working.
 
 ---
 
