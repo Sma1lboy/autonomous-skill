@@ -10,7 +10,7 @@ Three-layer hierarchy: Conductor -> Sprint Master -> Worker.
 ```
 Conductor (SKILL.md, user's CC session)
   |-- Plans sprint directions (directed phase or exploration phase)
-  |-- Dispatches sprint master via claude -p in tmux (context isolation)
+  |-- Dispatches sprint master via claude -p in tmux (SPRINT.md inlined into prompt)
   |-- Evaluates sprint results, manages phase transitions
   |
   └── Sprint Master (SPRINT.md, separate claude -p session)

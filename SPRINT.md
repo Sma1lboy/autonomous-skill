@@ -3,8 +3,9 @@
 Per-sprint master for the autonomous-skill conductor. Runs one focused sprint:
 Sense the project, direct a worker, respond to questions, summarize results.
 
-This file is invoked by the Conductor (SKILL.md) via `claude -p` with a sprint
-direction. It does NOT interact with the user directly.
+This file is inlined directly into the sprint master's prompt by the Conductor
+(SKILL.md) — its full content is concatenated into the prompt, NOT referenced
+as a file to read. It does NOT interact with the user directly.
 
 ## Input
 
@@ -18,11 +19,15 @@ The Conductor provides these via the prompt:
 ## Startup
 
 ```bash
-SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")"
-if [ ! -d "$SCRIPT_DIR/scripts" ]; then
-  for dir in ~/.claude/skills/autonomous-skill /Volumes/ssd/i/auto-tool-workspace/autonomous-skill; do
-    if [ -d "$dir/scripts" ]; then SCRIPT_DIR="$dir"; break; fi
-  done
+# SCRIPT_DIR is provided in the prompt header by the conductor.
+# Fallback discovery in case it's missing or invalid:
+if [ -z "$SCRIPT_DIR" ] || [ ! -d "$SCRIPT_DIR/scripts" ]; then
+  SCRIPT_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")"
+  if [ ! -d "$SCRIPT_DIR/scripts" ]; then
+    for dir in ~/.claude/skills/autonomous-skill /Volumes/ssd/i/auto-tool-workspace/autonomous-skill; do
+      if [ -d "$dir/scripts" ]; then SCRIPT_DIR="$dir"; break; fi
+    done
+  fi
 fi
 [ -f OWNER.md ] && cat OWNER.md
 echo "PROJECT: $(basename $(pwd))"
@@ -53,8 +58,18 @@ and make sure the output meets your standards.
 
 You have a specific direction for this sprint. Focus on it.
 
-1. **Sense** — Feel the project. What's solid? What's fragile? What's ugly?
-   Focus on the sprint direction.
+1. **Sense** — Feel the project BEFORE writing the worker prompt.
+   Read the actual code. Understand what exists. What's solid? What's fragile?
+
+   **You MUST sense first.** The conductor gives you a direction (1-2 sentences),
+   not a spec. Your job is to turn that direction into a concrete task by:
+   - Reading the relevant source files
+   - Understanding the current state of the code
+   - Identifying what specifically needs to change
+   - Deciding the right approach based on what you see
+
+   Do NOT just forward the conductor's direction to the worker verbatim.
+   The conductor says WHAT to do. You figure out HOW after sensing the project.
 
    If BACKLOG_TITLES is non-empty, glance at the titles for situational awareness.
    These are deferred items the conductor is tracking. Do NOT pull from them —
@@ -69,6 +84,15 @@ You have a specific direction for this sprint. Focus on it.
    - Feels fragile? -> "Run /qa on this codebase."
    - Bug? -> "Run /investigate on: ..."
 
+   **IMPORTANT: Keep the worker prompt CONCISE.** The worker has full tools —
+   it can read code, browse the web, run skills. Give it:
+   - A clear task (1-3 sentences)
+   - Essential context it can't discover itself (e.g., reference URL, design system)
+   - The comms protocol and gstack sprint process (from Worker Prompt template below)
+   - Nothing more. No file-by-file specs, no CSS values, no layout details.
+   The worker will sense the project itself and make implementation decisions.
+   Over-specifying creates noise that hurts the model's attention.
+
    Write the worker prompt, then dispatch in a tmux window so the user
    can watch the worker in real-time:
 
@@ -80,7 +104,7 @@ You have a specific direction for this sprint. Focus on it.
    # Create a wrapper script — tmux cannot use claude -p or stdin redirect reliably
    cat > .autonomous/run-worker.sh << RUNEOF
 #!/bin/bash
-cd $(pwd)
+cd "$(pwd)"
 PROMPT=\$(cat .autonomous/worker-prompt.md)
 exec claude --dangerously-skip-permissions "\$PROMPT"
 RUNEOF
@@ -183,15 +207,20 @@ RUNEOF
 
 ## Worker Prompt
 
-When you write `.autonomous/worker-prompt.md`, include this context.
+When you write `.autonomous/worker-prompt.md`, keep it concise.
 Write in first person — you ARE the owner talking to your worker.
+
+**Keep the worker prompt concise.** The worker has full tools and will sense
+the project itself. Don't duplicate what it can discover by reading the code.
+Only include what it CAN'T figure out on its own (task + essential context +
+comms protocol from the template below).
 
 ```markdown
 I received a task from the project owner. Running as `claude -p` (non-interactive).
 
 Project: {project path}
-Task: {description of what needs to be done}
-Context: {relevant background — who it's for, what exists already, key constraints}
+Task: {1-3 sentence description — WHAT to do, not HOW}
+Context: {only what the worker can't discover by reading the code — e.g., reference URLs, design system name, user constraints}
 
 gstack is a sprint process — each skill feeds into the next. I'll run the full sprint:
 
@@ -259,4 +288,6 @@ This file is read by the Conductor after the sprint ends.
 
 ## Begin
 
-You have your direction. Start now. Feel the project. Dispatch your first worker.
+**ACT NOW.** Run the Startup block, then Session Setup, then Sense the project,
+then dispatch your worker. Do not summarize these instructions. Do not explain
+what you're about to do. Execute the first bash block immediately.
