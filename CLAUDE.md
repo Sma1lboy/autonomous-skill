@@ -42,6 +42,8 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/retry-strategy.sh` — Analyze sprint failures, suggest retry directions (3-strike rule)
 - `scripts/rate-limiter.sh` — Rate limit detection and exponential backoff for dispatch retries (check, wait, record, report)
 - `scripts/selective-merge.sh` — Cherry-pick specific sprints from a session branch (list, merge, squash, dry-run, interactive)
+- `scripts/parallel-dispatch.sh` — Dispatch N sprints simultaneously in separate worktrees
+- `scripts/parallel-monitor.sh` — Monitor N worktree directories for sprint completion
 
 #### Sprint master layer scripts (used by SPRINT.md)
 
@@ -76,6 +78,12 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/metrics.sh` — Cross-session metrics dashboard: collect, show, trend with per-project filtering and JSON output
 - `scripts/config-validator.sh` — Validate .autonomous/skill-config.json: validate, init, migrate, --fix
 - `scripts/learnings.sh` — Cross-session learning system: record sprint outcomes, query history, suggest directions, prune old entries (max 200 FIFO)
+- `scripts/autonomous-status.sh` — Quick status check for autonomous sessions (reads progress.json)
+- `scripts/common.sh` — Shared utility functions sourced by other scripts
+- `scripts/comms-lib.sh` — Shared comms.json helpers sourced by monitor scripts
+- `scripts/progress-reporter.sh` — Progress reporting: reads conductor-state.json, writes/reads progress.json
+- `scripts/run-all-tests.sh` — Parallel test runner with summary, filtering, and sequential mode
+- `scripts/templates.sh` — Session template system: store/replay sprint patterns from completed sessions
 
 #### Skills
 
@@ -156,7 +164,7 @@ bash tests/test_conductor.sh          # 94 tests: state management, phase transi
 bash tests/test_comms.sh              # 50 tests: comms.json protocol, master-watch/master-poll CLI help
 bash tests/test_multi_worker.sh       # 98 tests: per-worker comms isolation, --all mode, archiving, backward compat
 bash tests/test_persona.sh            # 29 tests: OWNER.md generation, CLI help
-bash tests/test_explore_scan.sh       # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
+bash tests/test_explore_scan.sh       # 46 tests: 8-dimension scoring heuristics, edge cases, CLI help
 bash tests/test_loop.sh               # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
 bash tests/test_backlog.sh            # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
 bash tests/test_detect_framework.sh   # 71 tests: framework detection for node/react/next/vue/angular/rust/go/python/ruby/java/bash
@@ -170,22 +178,32 @@ bash tests/test_evaluate_sprint.sh    # 24 tests: summary reading, state updates
 bash tests/test_conversations.sh      # 56 tests: comms round-trip, cross-attention quality
 bash tests/test_error_handling.sh     # 33 tests: corrupt JSON, atomic writes, monitor timeouts
 bash tests/test_quality_gate.sh      # 76 tests: quality gate verification, framework detection, config override, shellcheck integration
-bash tests/test_session_resume.sh    # 42 tests: resume detection, branch validation, --resume/--fresh flags, edge cases
+bash tests/test_session_resume.sh    # 40 tests: resume detection, branch validation, --resume/--fresh flags, edge cases
 bash tests/test_cost_tracker.sh      # 60 tests: record, check budget, parse-output, report, accumulation, integration
 bash tests/test_shutdown.sh          # 63 tests: graceful shutdown, signal propagation, monitor integration, JSON output
-bash tests/test_session_diff.sh      # 79 tests: diff summary, commit categorization, test detection, JSON/markdown output, session-report integration
+bash tests/test_session_diff.sh      # 74 tests: diff summary, commit categorization, test detection, JSON/markdown output, session-report integration
 bash tests/test_retry_strategy.sh    # 60 tests: retry analysis, 3-strike rule, adjusted direction, retry-mark, get-sprint, count, edge cases
 bash tests/test_dispatch_timeout.sh  # 28 tests: worker timeout enforcement, env/config override, timeout exit handling, monitor detection
-bash tests/test_history.sh           # 113 tests: history viewer listing, detail, compare, JSON, graceful handling, edge cases
+bash tests/test_dispatch_worktree.sh # 18 tests: dispatch worktree isolation: env/config override, branch file, backward compat
+bash tests/test_edge_cases.sh        # ~50 tests: non-git dirs, empty repos, missing deps, corrupted JSON, long inputs, special chars
+bash tests/test_explore_deep.sh       # 46 tests: deep exploration dimension analysis, scoring, edge cases
+bash tests/test_history.sh           # 110 tests: history viewer listing, detail, compare, JSON, graceful handling, edge cases
+bash tests/test_integration.sh        # integration tests: end-to-end pipeline validation
 bash tests/test_rate_limiter.sh      # 62 tests: rate limit detection, backoff calculation, recording, reporting, session-report integration
-bash tests/test_stability.sh         # 53 tests: flaky test detection, JSON output, fix mode pattern analysis, real suite validation
+bash tests/test_stability.sh         # 55 tests: flaky test detection, JSON output, fix mode pattern analysis, real suite validation
 bash tests/test_measure_prompt.sh    # 44 tests: prompt size measurement, section breakdown, JSON output, edge cases
-bash tests/test_selective_merge.sh   # 158 tests: selective merge/cherry-pick, squash, dry-run, interactive, conflict handling
-bash tests/test_worktree_manager.sh  # worktree lifecycle: create, destroy, list, merge, cleanup, path, sanitization
-bash tests/test_dispatch_worktree.sh # dispatch worktree isolation: env/config override, branch file, backward compat
-bash tests/test_metrics.sh           # 57 tests: collect, show, trend, per-project filtering, JSON output, edge cases
-bash tests/test_config_validator.sh  # 85 tests: validate, init, migrate, --fix, schema checking, edge cases
-bash tests/test_learnings.sh          # 102 tests: record, query, suggest, prune, FIFO overflow, filters, JSON output
+bash tests/test_parallel_conductor.sh # 38 tests: parallel conductor dispatch, worktree coordination
+bash tests/test_parallel_dispatch.sh  # 55 tests: parallel sprint dispatch, worktree isolation
+bash tests/test_parallel_monitor.sh   # 53 tests: parallel monitor polling, completion detection
+bash tests/test_parse_args_template.sh # 42 tests: template-aware argument parsing
+bash tests/test_progress_reporter.sh  # 81 tests: progress reporting, state tracking, JSON output
+bash tests/test_run_all_tests.sh      # 34 tests: test runner discovery, filtering, parallel execution
+bash tests/test_selective_merge.sh   # 154 tests: selective merge/cherry-pick, squash, dry-run, interactive, conflict handling
+bash tests/test_templates.sh          # 201 tests: template CRUD, replay, cross-project reuse
+bash tests/test_worktree_manager.sh  # 31 tests: worktree lifecycle: create, destroy, list, merge, cleanup, path, sanitization
+bash tests/test_metrics.sh           # 54 tests: collect, show, trend, per-project filtering, JSON output, edge cases
+bash tests/test_config_validator.sh  # 82 tests: validate, init, migrate, --fix, schema checking, edge cases
+bash tests/test_learnings.sh          # 97 tests: record, query, suggest, prune, FIFO overflow, filters, JSON output
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
