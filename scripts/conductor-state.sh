@@ -37,6 +37,10 @@ Commands:
       Dimensions: test_coverage, error_handling, security, code_quality,
                   documentation, architecture, performance, dx
 
+  progress <project-dir>
+      Print a one-line status string summarizing current session state
+      Format: "Sprint N/M | phase | X commits | last: summary"
+
   retry-mark <project-dir> <sprint-num>
       Increment retry_count on the specified sprint entry
 
@@ -53,6 +57,7 @@ Examples:
   bash scripts/conductor-state.sh init ./my-project "build REST API" 5
   bash scripts/conductor-state.sh read ./my-project
   bash scripts/conductor-state.sh sprint-start ./my-project "add auth middleware"
+  bash scripts/conductor-state.sh progress ./my-project
   bash scripts/conductor-state.sh retry-mark ./my-project 3
   bash scripts/conductor-state.sh get-sprint ./my-project 2
   bash scripts/conductor-state.sh phase ./my-project
@@ -484,6 +489,41 @@ print('{}')
 " "$state" "$sprint_num"
 }
 
+cmd_progress() {
+  local state
+  state=$(read_state)
+
+  python3 -c "
+import json, sys
+
+d = json.loads(sys.argv[1])
+if not d or 'phase' not in d:
+    print('No active session')
+    sys.exit(0)
+
+sprints = d.get('sprints', [])
+max_sprints = d.get('max_sprints', 0)
+phase = d.get('phase', 'unknown')
+current = len(sprints)
+total_commits = sum(len(s.get('commits', [])) for s in sprints)
+
+# Last sprint summary (truncated)
+last_summary = ''
+for s in reversed(sprints):
+    if s.get('summary', ''):
+        last_summary = s['summary']
+        break
+
+if len(last_summary) > 50:
+    last_summary = last_summary[:47] + '...'
+
+if last_summary:
+    print(f'Sprint {current}/{max_sprints} | {phase} | {total_commits} commits | last: {last_summary}')
+else:
+    print(f'Sprint {current}/{max_sprints} | {phase} | {total_commits} commits')
+" "$state"
+}
+
 cmd_lock() {
   acquire_lock
   echo "locked (PID $$)"
@@ -504,9 +544,10 @@ case "$CMD" in
   phase)         cmd_phase ;;
   explore-pick)  cmd_explore_pick ;;
   explore-score) cmd_explore_score "$@" ;;
+  progress)      cmd_progress ;;
   lock)          cmd_lock ;;
   unlock)        cmd_unlock ;;
   retry-mark)    cmd_retry_mark "$@" ;;
   get-sprint)    cmd_get_sprint "$@" ;;
-  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|retry-mark|get-sprint|lock|unlock" ;;
+  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|progress|retry-mark|get-sprint|lock|unlock" ;;
 esac
