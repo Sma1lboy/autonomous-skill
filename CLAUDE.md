@@ -39,6 +39,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/explore-scan.sh` — Project scanner: scores 8 exploration dimensions via bash heuristics
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
 - `scripts/monitor-sprint.sh` — Poll for sprint completion via summary file + tmux liveness
+- `scripts/retry-strategy.sh` — Analyze sprint failures, suggest retry directions (3-strike rule)
 
 #### Sprint master layer scripts (used by SPRINT.md)
 
@@ -111,6 +112,8 @@ The conductor tracks multi-sprint progress in `.autonomous/conductor-state.json`
 - Phase transition decision tree (see SKILL.md)
 - Exploration dimensions with audit status and scores
 - Atomic writes (tmp+mv), PID lock for concurrency safety
+- Per-sprint `retry_count` tracking (0 by default, incremented via `retry-mark`)
+- `get-sprint` command to retrieve individual sprint data as JSON
 
 ## Backlog
 
@@ -161,6 +164,7 @@ bash tests/test_session_resume.sh    # 42 tests: resume detection, branch valida
 bash tests/test_cost_tracker.sh      # 60 tests: record, check budget, parse-output, report, accumulation, integration
 bash tests/test_shutdown.sh          # 63 tests: graceful shutdown, signal propagation, monitor integration, JSON output
 bash tests/test_session_diff.sh      # 79 tests: diff summary, commit categorization, test detection, JSON/markdown output, session-report integration
+bash tests/test_retry_strategy.sh    # 60 tests: retry analysis, 3-strike rule, adjusted direction, retry-mark, get-sprint, count, edge cases
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 

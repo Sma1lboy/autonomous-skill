@@ -198,6 +198,20 @@ if [ -n "${BACKLOG_ITEM_ID:-}" ] && [ "$STATUS" = "complete" ]; then
 fi
 ```
 
+**Retry failed sprints** (before moving to next direction):
+If STATUS is not "complete" or QG_PASSED is "false":
+```bash
+RETRY=$(bash "$SCRIPT_DIR/scripts/retry-strategy.sh" analyze "$(pwd)" "$SPRINT_NUM")
+SHOULD_RETRY=$(echo "$RETRY" | python3 -c "import json,sys; print(json.load(sys.stdin).get('should_retry', False))")
+if [ "$SHOULD_RETRY" = "True" ]; then
+  ADJUSTED=$(echo "$RETRY" | python3 -c "import json,sys; print(json.load(sys.stdin).get('adjusted_direction', ''))")
+  bash "$SCRIPT_DIR/scripts/conductor-state.sh" retry-mark "$(pwd)" "$SPRINT_NUM"
+  # Use adjusted_direction as next sprint's direction
+else
+  # 3-strike rule: direction failed too many times, move on
+fi
+```
+
 ### 5. Repeat
 
 Continue to the next sprint. Stop when:

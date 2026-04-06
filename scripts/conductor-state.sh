@@ -37,6 +37,12 @@ Commands:
       Dimensions: test_coverage, error_handling, security, code_quality,
                   documentation, architecture, performance, dx
 
+  retry-mark <project-dir> <sprint-num>
+      Increment retry_count on the specified sprint entry
+
+  get-sprint <project-dir> <sprint-num>
+      Return a single sprint's data as JSON
+
   lock <project-dir>
       Acquire PID lock (prevents concurrent conductors)
 
@@ -47,6 +53,8 @@ Examples:
   bash scripts/conductor-state.sh init ./my-project "build REST API" 5
   bash scripts/conductor-state.sh read ./my-project
   bash scripts/conductor-state.sh sprint-start ./my-project "add auth middleware"
+  bash scripts/conductor-state.sh retry-mark ./my-project 3
+  bash scripts/conductor-state.sh get-sprint ./my-project 2
   bash scripts/conductor-state.sh phase ./my-project
 EOF
   exit 0
@@ -259,7 +267,8 @@ d.setdefault('sprints', []).append({
     'direction': sys.argv[2],
     'status': 'running',
     'commits': [],
-    'summary': ''
+    'summary': '',
+    'retry_count': 0
 })
 print(json.dumps(d))
 " "$state" "$direction")
@@ -305,12 +314,13 @@ if not sprints:
     print(json.dumps(d))
     sys.exit(0)
 
-# Update last sprint
+# Update last sprint (preserve retry_count if already set)
 sprints[-1]['status'] = status
 sprints[-1]['summary'] = summary
 sprints[-1]['commits'] = commits
 sprints[-1]['direction_complete'] = direction_complete
 sprints[-1]['quality_gate_passed'] = quality_gate
+sprints[-1].setdefault('retry_count', 0)
 
 # Update counters
 if direction_complete:
@@ -416,6 +426,64 @@ print(json.dumps(d))
   echo "ok"
 }
 
+cmd_retry_mark() {
+  local sprint_num="${3:-}"
+  [ -z "$sprint_num" ] && die "Usage: conductor-state.sh retry-mark <project-dir> <sprint-num>"
+  [[ "$sprint_num" =~ ^[0-9]+$ ]] || die "sprint-num must be a positive integer, got: $sprint_num"
+
+  local state
+  state=$(read_state_strict) || die "No conductor state found."
+
+  local updated
+  updated=$(python3 -c "
+import json, sys
+d = json.loads(sys.argv[1])
+num = int(sys.argv[2])
+found = False
+for s in d.get('sprints', []):
+    if s['number'] == num:
+        s['retry_count'] = s.get('retry_count', 0) + 1
+        found = True
+        print(json.dumps(d))
+        break
+if not found:
+    print(json.dumps(d))
+    print('WARNING: sprint {} not found'.format(num), file=sys.stderr)
+" "$state" "$sprint_num")
+
+  write_state "$updated"
+  # Print new retry_count
+  python3 -c "
+import json, sys
+d = json.loads(sys.argv[1])
+num = int(sys.argv[2])
+for s in d.get('sprints', []):
+    if s['number'] == num:
+        print(s.get('retry_count', 0))
+        break
+" "$updated" "$sprint_num"
+}
+
+cmd_get_sprint() {
+  local sprint_num="${3:-}"
+  [ -z "$sprint_num" ] && die "Usage: conductor-state.sh get-sprint <project-dir> <sprint-num>"
+  [[ "$sprint_num" =~ ^[0-9]+$ ]] || die "sprint-num must be a positive integer, got: $sprint_num"
+
+  local state
+  state=$(read_state_strict) || die "No conductor state found."
+
+  python3 -c "
+import json, sys
+d = json.loads(sys.argv[1])
+num = int(sys.argv[2])
+for s in d.get('sprints', []):
+    if s['number'] == num:
+        print(json.dumps(s))
+        sys.exit(0)
+print('{}')
+" "$state" "$sprint_num"
+}
+
 cmd_lock() {
   acquire_lock
   echo "locked (PID $$)"
@@ -438,5 +506,7 @@ case "$CMD" in
   explore-score) cmd_explore_score "$@" ;;
   lock)          cmd_lock ;;
   unlock)        cmd_unlock ;;
-  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|lock|unlock" ;;
+  retry-mark)    cmd_retry_mark "$@" ;;
+  get-sprint)    cmd_get_sprint "$@" ;;
+  *)             die "Unknown command: $CMD. Use: init|read|sprint-start|sprint-end|phase|explore-pick|explore-score|retry-mark|get-sprint|lock|unlock" ;;
 esac
