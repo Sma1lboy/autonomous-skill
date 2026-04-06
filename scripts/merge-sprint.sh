@@ -12,6 +12,20 @@ usage() {
   echo "Usage: bash merge-sprint.sh <session_branch> <sprint_branch> <sprint_num> <status> <summary>"
   echo ""
   echo "Merge sprint branch into session branch (if commits exist), then clean up."
+  echo "Only merges for 'complete' or 'partial' status; otherwise discards."
+  echo "Deletes the sprint branch after merge or discard."
+  echo ""
+  echo "Arguments:"
+  echo "  session_branch  Session branch to merge into (e.g., auto/session-1234567890)"
+  echo "  sprint_branch   Sprint branch to merge from (e.g., auto/session-1234567890-sprint-1)"
+  echo "  sprint_num      Sprint number (e.g., 1, 2, 3)"
+  echo "  status          Sprint result: complete | partial | blocked | unknown"
+  echo "  summary         One-line summary for the merge commit message"
+  echo ""
+  echo "Examples:"
+  echo "  bash merge-sprint.sh auto/session-123 auto/session-123-sprint-1 1 complete \"added REST endpoints\""
+  echo "  bash merge-sprint.sh auto/session-123 auto/session-123-sprint-2 2 blocked \"rate limited\""
+  echo "  bash merge-sprint.sh auto/session-123 auto/session-123-sprint-3 3 partial \"partial refactor\""
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
