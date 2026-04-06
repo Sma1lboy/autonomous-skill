@@ -37,7 +37,7 @@ Optional but recommended: [gstack](https://github.com/garrytan/gstack) (for bett
 Open Claude Code and paste this. Claude does the rest:
 
 ```
-Install autonomous-skill: run git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill then add an "autonomous-skill" section to CLAUDE.md that says this is a self-driving project agent — run /autonomous-skill to start an autonomous session that creates an auto/ branch and continuously finds and fixes issues. Usage: /autonomous-skill [sprint_count] [direction]. Examples: /autonomous-skill (explore mode, 10 sprints), /autonomous-skill 5 build REST API, /autonomous-skill unlimited. List the helper skills: /test-worker, /clean-sandbox, /capture-worker, /diff-sessions. Mention that all changes happen on auto/ branches (never main), with --dangerously-skip-permissions and 15-minute timeout per sprint. Then ask the user if they want to try it now on the current project.
+Install autonomous-skill: run git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill.
 ```
 
 Or install manually:
@@ -47,6 +47,46 @@ git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill
 ```
 
 Then in any git repo, open Claude Code and run `/autonomous-skill`. It creates an `auto/session-*` branch and starts working.
+
+---
+
+## Usage
+
+### Fully Unattended Mode
+
+By default, Claude Code will still prompt you for permissions on certain operations (file writes, bash commands, etc.) during the conductor session. If you want a **truly hands-off** experience — close your laptop and come back to finished work — start Claude Code with:
+
+```bash
+claude --dangerously-skip-permissions
+```
+
+Then run `/autonomous-skill` as usual. The conductor, sprint masters, and workers will all run without permission prompts.
+
+> **Note**: This flag skips all permission checks. The built-in [safety guards](#safety) (branch isolation, excluded workflows, timeouts, cost budgets) still apply, but you should review the changes on the `auto/session-*` branch before merging to main.
+
+```bash
+# Default: 10 sprints
+/autonomous-skill
+
+# Quick: 3 sprints
+/autonomous-skill 3
+
+# With direction: focus on a specific area
+/autonomous-skill 5 build REST API
+
+# Unlimited sprints
+/autonomous-skill unlimited
+
+# Direction only (default 10 sprints)
+/autonomous-skill fix all auth bugs
+```
+
+### Standalone (outside Claude Code)
+
+```bash
+# Direct bash invocation via loop.sh
+AUTONOMOUS_DIRECTION="fix auth bugs" bash scripts/loop.sh /path/to/project
+```
 
 ---
 
@@ -126,35 +166,6 @@ The sprint master polls, decides using product intuition (or OWNER.md guidance),
 
 Valid statuses: `idle`, `waiting`, `answered`, `done`.
 
----
-
-## Usage
-
-```bash
-# Default: 10 sprints
-/autonomous-skill
-
-# Quick: 3 sprints
-/autonomous-skill 3
-
-# With direction: focus on a specific area
-/autonomous-skill 5 build REST API
-
-# Unlimited sprints
-/autonomous-skill unlimited
-
-# Direction only (default 10 sprints)
-/autonomous-skill fix all auth bugs
-```
-
-### Standalone (outside Claude Code)
-
-```bash
-# Direct bash invocation via loop.sh
-AUTONOMOUS_DIRECTION="fix auth bugs" bash scripts/loop.sh /path/to/project
-```
-
----
 
 ## Configuration
 
