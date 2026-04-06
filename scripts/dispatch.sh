@@ -1,17 +1,20 @@
 #!/bin/bash
 # dispatch.sh — Launch a claude -p session in tmux or headless background
 #
-# Usage: bash dispatch.sh <project_dir> <prompt_file> <window_name>
+# Usage: bash dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]
 #
 # Creates a wrapper script, then dispatches in tmux (if available) or
 # falls back to headless background execution.
+#
+# If worker-id is provided, creates .autonomous/comms-{worker-id}.json
+# with {"status":"idle"} for per-worker comms isolation.
 #
 # Output: Prints launch status. Sets DISPATCH_PID for headless mode.
 
 set -euo pipefail
 
 show_help() {
-  echo "Usage: bash dispatch.sh <project_dir> <prompt_file> <window_name>"
+  echo "Usage: bash dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]"
   echo ""
   echo "Launch a claude -p session from a prompt file."
   echo ""
@@ -19,10 +22,13 @@ show_help() {
   echo "  project_dir   Project directory to cd into"
   echo "  prompt_file   Path to the prompt markdown file"
   echo "  window_name   tmux window name (e.g., 'worker', 'sprint-1')"
+  echo "  worker-id     Optional worker identifier for per-worker comms isolation"
+  echo "                Creates .autonomous/comms-{worker-id}.json if provided"
   echo ""
   echo "Examples:"
   echo "  bash dispatch.sh /path/to/project .autonomous/worker-prompt.md worker"
   echo "  bash dispatch.sh /path/to/project .autonomous/sprint-prompt.md sprint-1"
+  echo "  bash dispatch.sh /path/to/project .autonomous/worker-prompt.md w1 worker-1"
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
@@ -30,13 +36,20 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
   exit 0
 fi
 
-PROJECT_DIR="${1:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name>}"
-PROMPT_FILE="${2:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name>}"
-WINDOW_NAME="${3:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name>}"
+PROJECT_DIR="${1:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
+PROMPT_FILE="${2:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
+WINDOW_NAME="${3:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
+WORKER_ID="${4:-}"
 
 if [ ! -f "$PROMPT_FILE" ]; then
   echo "ERROR: Prompt file not found: $PROMPT_FILE" >&2
   exit 1
+fi
+
+# Create per-worker comms file if worker-id provided
+if [ -n "$WORKER_ID" ]; then
+  mkdir -p "$PROJECT_DIR/.autonomous"
+  echo '{"status":"idle"}' > "$PROJECT_DIR/.autonomous/comms-${WORKER_ID}.json"
 fi
 
 # Create wrapper script — tmux cannot use claude -p or stdin redirect reliably

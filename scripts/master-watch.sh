@@ -5,17 +5,21 @@ set -euo pipefail
 
 usage() {
   cat << 'EOF'
-Usage: master-watch.sh [project-dir] [worker-pid]
+Usage: master-watch.sh [project-dir] [worker-pid] [worker-id]
 
 Dual-channel monitor for autonomous-skill workers. Watches both:
   1. comms.json — questions from the worker needing answers
   2. Worker session JSONL — tool calls, progress, errors
 
+If worker-id is provided, monitors .autonomous/comms-{worker-id}.json
+instead of comms.json for per-worker comms isolation.
+
 Arguments:
   project-dir   Path to the project (default: current directory)
   worker-pid    PID of the worker process (optional, for liveness checks)
+  worker-id     Worker identifier (optional; monitors per-worker comms file)
 
-Requires: .autonomous/comms.json must exist (worker must be running).
+Requires: comms file must exist (worker must be running).
 Press Ctrl+C to stop.
 EOF
   exit 0
@@ -30,7 +34,14 @@ command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found"
 
 PROJECT="${1:-.}"
 WORKER_PID="${2:-}"
-COMMS="$PROJECT/.autonomous/comms.json"
+WORKER_ID="${3:-}"
+
+# Determine which comms file to watch
+if [ -n "$WORKER_ID" ]; then
+  COMMS="$PROJECT/.autonomous/comms-${WORKER_ID}.json"
+else
+  COMMS="$PROJECT/.autonomous/comms.json"
+fi
 
 if [ ! -f "$COMMS" ]; then
   echo "ERROR: $COMMS not found. Is the worker running?" >&2
@@ -41,7 +52,8 @@ trap 'echo ""; echo "  Stopped."; exit 0' INT TERM
 
 # Find worker session JSONL
 find_session() {
-  local slug=$(basename "$PROJECT")
+  local slug
+  slug=$(basename "$PROJECT")
   find ~/.claude/projects/ -path "*${slug}*" -name "*.jsonl" -not -name "agent-*" -mmin -60 2>/dev/null | sort -t/ -k1 | tail -1
 }
 
@@ -53,6 +65,7 @@ _CACHE_TIME=0
 echo "══════════════════════════════════════"
 echo " Master Watch — $PROJECT"
 [ -n "$WORKER_PID" ] && echo " Worker PID: $WORKER_PID"
+[ -n "$WORKER_ID" ] && echo " Worker ID: $WORKER_ID"
 echo " Ctrl+C to stop"
 echo "══════════════════════════════════════"
 

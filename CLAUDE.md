@@ -66,6 +66,7 @@ Workers use `{project}/.autonomous/comms.json` for interactive skill questions:
 - Master writes `{"status":"answered","answers":[...]}` -> worker continues
 - Replaces AskUserQuestion which is unavailable in subagent context
 - Valid statuses: "idle", "waiting", "answered", "done"
+- Per-worker isolation: `comms-{worker-id}.json` for concurrent multi-worker dispatch
 - Validated: 20+ rounds per session, cross-attention quality preserved
 
 ## Conductor State
@@ -104,6 +105,7 @@ Cross-session persistent work queue in `.autonomous/backlog.json`:
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
 bash tests/test_comms.sh        # 34 tests: comms.json protocol, master-watch/master-poll CLI help
+bash tests/test_multi_worker.sh # per-worker comms isolation, --all mode, archiving, backward compat
 bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
 bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
 bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
