@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash session-init.sh <project_dir> <script_dir> <direction> <max_sprints>"
   echo ""
   echo "Create a session branch, initialize conductor state and backlog."
@@ -17,7 +17,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

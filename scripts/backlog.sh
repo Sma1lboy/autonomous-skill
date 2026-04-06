@@ -71,10 +71,11 @@ STATE_DIR="$PROJECT/.autonomous"
 BACKLOG_FILE="$STATE_DIR/backlog.json"
 LOCK_DIR="$STATE_DIR/backlog.lock"
 MAX_OPEN=50
+MAX_TITLE_LENGTH=120
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 # ── Locking (mkdir-based, POSIX atomic) ──────────────────────────────────
 
@@ -222,8 +223,8 @@ priority = int(sys.argv[5])
 dimension = sys.argv[6] if sys.argv[6] else None
 triaged = sys.argv[7] == 'true'
 
-# Sanitize title: strip control chars and newlines, truncate to 120
-title = re.sub(r'[\x00-\x1f\x7f]', '', title)[:120]
+# Sanitize title: strip control chars and newlines, truncate
+title = re.sub(r'[\x00-\x1f\x7f]', '', title)[:$MAX_TITLE_LENGTH]
 
 items = d.get('items', [])
 ts = int(time.time())
