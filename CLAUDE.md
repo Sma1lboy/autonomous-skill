@@ -73,6 +73,8 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/history.sh` — Sprint history viewer: list all auto/ branches with session metadata, detail, compare, JSON output
 - `scripts/test-stability.sh` — Flaky test detection: run tests N times, identify inconsistent pass/fail, static analysis for flakiness patterns
 - `scripts/worktree-manager.sh` — Git worktree lifecycle for sprint isolation (create, destroy, list, merge, cleanup, path)
+- `scripts/metrics.sh` — Cross-session metrics dashboard: collect, show, trend with per-project filtering and JSON output
+- `scripts/config-validator.sh` — Validate .autonomous/skill-config.json: validate, init, migrate, --fix
 
 #### Skills
 
@@ -180,6 +182,8 @@ bash tests/test_measure_prompt.sh    # 44 tests: prompt size measurement, sectio
 bash tests/test_selective_merge.sh   # 158 tests: selective merge/cherry-pick, squash, dry-run, interactive, conflict handling
 bash tests/test_worktree_manager.sh  # worktree lifecycle: create, destroy, list, merge, cleanup, path, sanitization
 bash tests/test_dispatch_worktree.sh # dispatch worktree isolation: env/config override, branch file, backward compat
+bash tests/test_metrics.sh           # 57 tests: collect, show, trend, per-project filtering, JSON output, edge cases
+bash tests/test_config_validator.sh  # 85 tests: validate, init, migrate, --fix, schema checking, edge cases
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
