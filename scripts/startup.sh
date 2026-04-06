@@ -14,9 +14,17 @@ usage() {
   echo "Resolve SCRIPT_DIR and display project context (OWNER.md, git log)."
   echo "If project_dir is omitted, uses current directory."
   echo ""
+  echo "Arguments:"
+  echo "  project_dir   Optional project directory (default: current directory)"
+  echo ""
   echo "Output:"
   echo "  SCRIPT_DIR=<path>   (first line, for eval)"
   echo "  Project context      (OWNER.md, branch, recent commits)"
+  echo ""
+  echo "Examples:"
+  echo "  bash scripts/startup.sh /path/to/project"
+  echo "  eval \"\$(bash scripts/startup.sh)\""
+  echo "  bash scripts/startup.sh ."
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then

@@ -22,6 +22,11 @@ usage() {
   echo "  direction_complete  true | false (default: true)"
   echo "  sprint_num          Sprint number (optional; archives comms.json and"
   echo "                      per-worker comms-worker-*.json files if provided)"
+  echo ""
+  echo "Examples:"
+  echo "  bash write-summary.sh /path/to/project complete \"Added REST endpoints and tests\""
+  echo "  bash write-summary.sh . partial \"Refactored auth module\" 3 false"
+  echo "  bash write-summary.sh /project complete \"Built user dashboard\" 2 true 5"
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then

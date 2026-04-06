@@ -12,8 +12,21 @@ set -euo pipefail
 usage() {
   echo "Usage: bash monitor-sprint.sh <project_dir> <sprint_num>"
   echo ""
-  echo "Poll for sprint completion. Blocks until sprint-summary.json appears"
-  echo "or the sprint tmux window closes."
+  echo "Poll for sprint completion. Blocks until sprint-summary.json appears,"
+  echo "the sprint tmux window closes, or a shutdown sentinel is detected."
+  echo "Also handles comms.json 'done' status as a fallback completion signal."
+  echo ""
+  echo "Arguments:"
+  echo "  project_dir   Project directory (contains .autonomous/)"
+  echo "  sprint_num    Sprint number to monitor (e.g., 1, 2, 3)"
+  echo ""
+  echo "Environment:"
+  echo "  MONITOR_MAX_POLLS   Max poll iterations before timeout (default: 225, ~30min)"
+  echo ""
+  echo "Examples:"
+  echo "  bash monitor-sprint.sh /path/to/project 1"
+  echo "  bash monitor-sprint.sh . 3"
+  echo "  MONITOR_MAX_POLLS=10 bash monitor-sprint.sh /project 2"
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
