@@ -466,4 +466,262 @@ assert_eq "$EXIT" "0" "no test command → exits 0"
 VALID=$(is_valid_json "$OUT")
 assert_eq "$VALID" "yes" "no test command → valid JSON"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 31. Shellcheck passes on clean .sh files
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "31. Shellcheck passes on clean .sh files"
+if command -v shellcheck &>/dev/null; then
+  T=$(new_tmp)
+  mkdir -p "$T/.autonomous" "$T/scripts"
+  cd "$T" && git init -q
+  echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+  # Create a clean .sh file and commit it
+  cat > "$T/scripts/clean.sh" << 'CLEANEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "hello world"
+CLEANEOF
+  git add -A && git commit -q -m "init"
+  cd "$OLDPWD"
+
+  OUT=$(bash "$QG" "$T")
+  SC_PASSED=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('true' if d.get('shellcheck',{}).get('passed') else 'false')" "$OUT")
+  assert_eq "$SC_PASSED" "true" "shellcheck passes on clean .sh"
+  SC_FILES=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get('shellcheck',{}).get('files_checked',0))" "$OUT")
+  assert_ge "$SC_FILES" "1" "shellcheck checked >= 1 file"
+else
+  ok "shellcheck passes on clean .sh — SKIPPED (shellcheck not installed)"
+  ok "shellcheck checked >= 1 file — SKIPPED"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 32. Shellcheck fails on .sh files with errors
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "32. Shellcheck fails on .sh files with errors"
+if command -v shellcheck &>/dev/null; then
+  T=$(new_tmp)
+  mkdir -p "$T/.autonomous" "$T/scripts"
+  cd "$T" && git init -q
+  echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+  # Create a .sh file with shellcheck errors (severity=error: syntax error)
+  cat > "$T/scripts/bad.sh" << 'BADEOF'
+#!/usr/bin/env bash
+if [[ $x = ]; then
+  echo "bad syntax"
+fi
+BADEOF
+  git add -A && git commit -q -m "init"
+  cd "$OLDPWD"
+
+  OUT=$(bash "$QG" "$T" || true)
+  SC_PASSED=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('true' if d.get('shellcheck',{}).get('passed') else 'false')" "$OUT")
+  assert_eq "$SC_PASSED" "false" "shellcheck fails on bad .sh"
+  SC_ERRORS=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(len(d.get('shellcheck',{}).get('errors',[])))" "$OUT")
+  assert_ge "$SC_ERRORS" "1" "shellcheck reports >= 1 error"
+else
+  ok "shellcheck fails on bad .sh — SKIPPED (shellcheck not installed)"
+  ok "shellcheck reports >= 1 error — SKIPPED"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 33. Shellcheck skipped when not installed (PATH manipulation)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "33. Shellcheck skipped when not installed"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous" "$T/scripts"
+cd "$T" && git init -q
+echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+cat > "$T/scripts/any.sh" << 'ANYEOF'
+#!/usr/bin/env bash
+echo "test"
+ANYEOF
+git add -A && git commit -q -m "init"
+cd "$OLDPWD"
+
+# Remove shellcheck from PATH
+OUT=$(PATH="/usr/bin:/bin" bash "$QG" "$T")
+SC_SKIPPED=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('true' if d.get('shellcheck',{}).get('skipped') else 'false')" "$OUT")
+assert_eq "$SC_SKIPPED" "true" "shellcheck skipped when not in PATH"
+SC_REASON=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get('shellcheck',{}).get('skip_reason',''))" "$OUT")
+assert_contains "$SC_REASON" "not installed" "skip reason mentions not installed"
+# Overall should still pass since tests pass
+OVERALL=$(get_field "$OUT" "passed")
+assert_eq "$OVERALL" "true" "overall passes when shellcheck skipped"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 34. --skip-shellcheck flag
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "34. --skip-shellcheck flag"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous" "$T/scripts"
+cd "$T" && git init -q
+echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+cat > "$T/scripts/test.sh" << 'SKIPEOF'
+#!/usr/bin/env bash
+echo "test"
+SKIPEOF
+git add -A && git commit -q -m "init"
+cd "$OLDPWD"
+
+OUT=$(bash "$QG" "$T" --skip-shellcheck)
+SC_SKIPPED=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('true' if d.get('shellcheck',{}).get('skipped') else 'false')" "$OUT")
+assert_eq "$SC_SKIPPED" "true" "--skip-shellcheck sets skipped:true"
+SC_REASON=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get('shellcheck',{}).get('skip_reason',''))" "$OUT")
+assert_contains "$SC_REASON" "skip-shellcheck" "skip reason mentions flag"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 35. shellcheck field present in JSON output
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "35. shellcheck field in JSON output"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+OUT=$(bash "$QG" "$T")
+HAS_SC=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('yes' if 'shellcheck' in d else 'no')" "$OUT")
+assert_eq "$HAS_SC" "yes" "shellcheck field present in output"
+
+# Check subfields
+SC_FIELDS=$(python3 -c "
+import json, sys
+d = json.loads(sys.argv[1])
+sc = d.get('shellcheck', {})
+required = ['passed', 'files_checked', 'errors', 'skipped', 'skip_reason']
+missing = [f for f in required if f not in sc]
+print('ok' if not missing else 'missing: ' + ','.join(missing))
+" "$OUT")
+assert_eq "$SC_FIELDS" "ok" "shellcheck has all required subfields"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 36. Overall passed=false when shellcheck finds errors but tests pass
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "36. Overall passed=false when shellcheck fails"
+if command -v shellcheck &>/dev/null; then
+  T=$(new_tmp)
+  mkdir -p "$T/.autonomous" "$T/scripts"
+  cd "$T" && git init -q
+  echo '{"test_command":"echo tests-pass"}' > "$T/.autonomous/skill-config.json"
+  # Use a syntax error that shellcheck flags at error severity
+  cat > "$T/scripts/broken.sh" << 'BROKENEOF'
+#!/usr/bin/env bash
+if [[ $x = ]; then
+  echo "syntax error"
+fi
+BROKENEOF
+  git add -A && git commit -q -m "init"
+  cd "$OLDPWD"
+
+  OUT=$(bash "$QG" "$T" || true)
+  OVERALL=$(get_field "$OUT" "passed")
+  assert_eq "$OVERALL" "false" "overall false when shellcheck fails"
+  # Test output itself should show pass
+  OUTPUT_FIELD=$(get_field "$OUT" "output")
+  assert_contains "$OUTPUT_FIELD" "tests-pass" "test output captured despite shellcheck fail"
+else
+  ok "overall false when shellcheck fails — SKIPPED (shellcheck not installed)"
+  ok "test output captured despite shellcheck fail — SKIPPED"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 37. --dry-run shows shellcheck info
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "37. --dry-run shows shellcheck info"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous" "$T/scripts"
+cd "$T" && git init -q
+echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+cat > "$T/scripts/foo.sh" << 'DRYEOF'
+#!/usr/bin/env bash
+echo "test"
+DRYEOF
+git add -A && git commit -q -m "init"
+cd "$OLDPWD"
+
+OUT=$(bash "$QG" "$T" --dry-run)
+HAS_SC=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('yes' if 'shellcheck' in d else 'no')" "$OUT")
+assert_eq "$HAS_SC" "yes" "dry-run includes shellcheck info"
+WOULD_CHECK=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get('shellcheck',{}).get('would_check',0))" "$OUT")
+assert_ge "$WOULD_CHECK" "1" "dry-run shows would_check >= 1"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 38. No .sh files changed → shellcheck passes with files_checked=0
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "38. No .sh files → shellcheck passes"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+cd "$T" && git init -q
+echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+echo "readme" > "$T/README.md"
+git add -A && git commit -q -m "init"
+cd "$OLDPWD"
+
+OUT=$(bash "$QG" "$T")
+SC_PASSED=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('true' if d.get('shellcheck',{}).get('passed') else 'false')" "$OUT")
+assert_eq "$SC_PASSED" "true" "no .sh files → shellcheck passes"
+SC_FILES=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print(d.get('shellcheck',{}).get('files_checked',0))" "$OUT")
+assert_eq "$SC_FILES" "0" "no .sh files → files_checked=0"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 39. No test command + shellcheck still runs
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "39. No test command + shellcheck still runs"
+if command -v shellcheck &>/dev/null; then
+  T=$(new_tmp)
+  mkdir -p "$T/scripts"
+  cd "$T" && git init -q
+  cat > "$T/scripts/hello.sh" << 'NOTEST_EOF'
+#!/usr/bin/env bash
+echo "hello"
+NOTEST_EOF
+  git add -A && git commit -q -m "init"
+  cd "$OLDPWD"
+
+  OUT=$(bash "$QG" "$T")
+  # No test command → test_command is null
+  TEST_CMD=$(get_field "$OUT" "test_command")
+  assert_eq "$TEST_CMD" "None" "no test command detected"
+  # But shellcheck still runs
+  HAS_SC=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); print('yes' if 'shellcheck' in d else 'no')" "$OUT")
+  assert_eq "$HAS_SC" "yes" "shellcheck runs even without test command"
+else
+  ok "no test command detected — SKIPPED (shellcheck not installed)"
+  ok "shellcheck runs even without test command — SKIPPED"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 40. shellcheck errors array contains file:line info
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "40. shellcheck errors contain file info"
+if command -v shellcheck &>/dev/null; then
+  T=$(new_tmp)
+  mkdir -p "$T/.autonomous" "$T/scripts"
+  cd "$T" && git init -q
+  echo '{"test_command":"echo pass"}' > "$T/.autonomous/skill-config.json"
+  # Use a syntax error that shellcheck flags at error severity
+  cat > "$T/scripts/errfile.sh" << 'ERREOF'
+#!/usr/bin/env bash
+if [[ $x = ]; then
+  echo "parse error"
+fi
+ERREOF
+  git add -A && git commit -q -m "init"
+  cd "$OLDPWD"
+
+  OUT=$(bash "$QG" "$T" || true)
+  FIRST_ERR=$(python3 -c "import json,sys; d=json.loads(sys.argv[1]); errs=d.get('shellcheck',{}).get('errors',[]); print(errs[0] if errs else '')" "$OUT")
+  # shellcheck errors typically contain the filename
+  assert_contains "$FIRST_ERR" "errfile" "error references the file"
+else
+  ok "error references the file — SKIPPED (shellcheck not installed)"
+fi
+
 print_results

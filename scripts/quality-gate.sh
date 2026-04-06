@@ -9,9 +9,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 usage() {
   cat << 'EOF'
-Usage: quality-gate.sh <project-dir> [--dry-run] [--timeout SECONDS]
+Usage: quality-gate.sh <project-dir> [--dry-run] [--timeout SECONDS] [--skip-shellcheck]
 
 Run the project's test command and report pass/fail as structured JSON.
+Also runs shellcheck on changed .sh files if shellcheck is available.
 
 Uses detect-framework.sh to determine the test command, or reads a custom
 test_command from .autonomous/skill-config.json if present.
@@ -20,16 +21,18 @@ Arguments:
   project-dir    Path to the project root
 
 Options:
-  --dry-run      Show what would run without executing
-  --timeout N    Test command timeout in seconds (default: 300)
-  -h, --help     Show this help message
+  --dry-run          Show what would run without executing
+  --timeout N        Test command timeout in seconds (default: 300)
+  --skip-shellcheck  Skip shellcheck integration
+  -h, --help         Show this help message
 
 Output (JSON to stdout):
-  {"passed":true,"test_command":"npm test","output":"...","duration_seconds":5}
+  {"passed":true,"test_command":"npm test","output":"...","duration_seconds":5,
+   "shellcheck":{"passed":true,"files_checked":3,"errors":[],"skipped":false,"skip_reason":null}}
 
 Exit codes:
-  0  Tests passed (or no test command available)
-  1  Tests failed
+  0  Tests passed and shellcheck clean (or no test command available)
+  1  Tests failed or shellcheck found errors
 
 Examples:
   bash scripts/quality-gate.sh ./my-project
@@ -51,6 +54,7 @@ command -v python3 &>/dev/null || die "python3 required but not found"
 PROJECT_DIR=""
 DRY_RUN=false
 TIMEOUT=300
+SKIP_SHELLCHECK=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -63,6 +67,10 @@ while [ $# -gt 0 ]; do
       [ -z "${2:-}" ] && die "--timeout requires a value"
       TIMEOUT="$2"
       shift 2
+      ;;
+    --skip-shellcheck)
+      SKIP_SHELLCHECK=true
+      shift
       ;;
     *)
       if [ -z "$PROJECT_DIR" ]; then
@@ -120,25 +128,127 @@ except Exception:
 " "$DETECTION" 2>/dev/null || true)
 fi
 
+# ── Shellcheck helper function ──────────────────────────────────────────
+
+_find_changed_sh_files() {
+  local pdir="$1"
+  local files=""
+  # Try git diff for recently changed .sh files (last 10 commits)
+  if command -v git &>/dev/null && [ -d "$pdir/.git" ]; then
+    files=$(cd "$pdir" && git diff --diff-filter=ACMR --name-only HEAD~10 -- '*.sh' 2>/dev/null || true)
+  fi
+  # Fall back to scripts/*.sh if git diff fails or returns empty
+  if [ -z "$files" ]; then
+    files=$(cd "$pdir" && find scripts -name '*.sh' -type f 2>/dev/null | sort || true)
+  fi
+  echo "$files"
+}
+
+_run_shellcheck() {
+  local pdir="$1"
+  local skip="$2"
+
+  if [ "$skip" = "true" ]; then
+    python3 -c "
+import json
+d = {'passed':True,'files_checked':0,'errors':[],'skipped':True,'skip_reason':'--skip-shellcheck flag'}
+print(json.dumps(d))
+"
+    return
+  fi
+
+  if ! command -v shellcheck &>/dev/null; then
+    python3 -c "
+import json
+d = {'passed':True,'files_checked':0,'errors':[],'skipped':True,'skip_reason':'shellcheck not installed'}
+print(json.dumps(d))
+"
+    return
+  fi
+
+  local sh_files
+  sh_files=$(_find_changed_sh_files "$pdir")
+
+  if [ -z "$sh_files" ]; then
+    python3 -c "
+import json
+d = {'passed':True,'files_checked':0,'errors':[],'skipped':False,'skip_reason':None}
+print(json.dumps(d))
+"
+    return
+  fi
+
+  local file_count=0
+  local errors=()
+  local has_error=false
+
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    [ -f "$pdir/$f" ] || continue
+    ((file_count++)) || true
+    local sc_out
+    sc_out=$(shellcheck --severity=error "$pdir/$f" 2>&1 || true)
+    if [ -n "$sc_out" ]; then
+      has_error=true
+      while IFS= read -r line; do
+        [ -n "$line" ] && errors+=("$line")
+      done <<< "$sc_out"
+    fi
+  done <<< "$sh_files"
+
+  local passed=true
+  [ "$has_error" = "true" ] && passed=false
+
+  python3 -c "
+import json, sys
+passed = sys.argv[1] == 'true'
+files_checked = int(sys.argv[2])
+# Errors passed as remaining args
+errors = sys.argv[3:]
+d = {'passed':passed,'files_checked':files_checked,'errors':errors,'skipped':False,'skip_reason':None}
+print(json.dumps(d))
+" "$passed" "$file_count" "${errors[@]+"${errors[@]}"}"
+}
+
 # ── No test command available ────────────────────────────────────────────
 
 if [ -z "$TEST_CMD" ]; then
+  SC_RESULT=$(_run_shellcheck "$PROJECT_DIR" "$SKIP_SHELLCHECK")
+  SC_PASSED=$(python3 -c "import json,sys; print('true' if json.loads(sys.argv[1]).get('passed',True) else 'false')" "$SC_RESULT")
+  _NO_CMD_PASSED=true
+  [ "$SC_PASSED" = "false" ] && _NO_CMD_PASSED=false
   python3 -c "
-import json
-d = {'passed': True, 'test_command': None, 'output': 'no test command detected for this project', 'duration_seconds': 0}
+import json, sys
+sc = json.loads(sys.argv[1])
+passed = sys.argv[2] == 'true'
+d = {'passed': passed, 'test_command': None, 'output': 'no test command detected for this project', 'duration_seconds': 0, 'shellcheck': sc}
 print(json.dumps(d))
-"
-  exit 0
+" "$SC_RESULT" "$_NO_CMD_PASSED"
+  [ "$_NO_CMD_PASSED" = true ] && exit 0 || exit 1
 fi
 
 # ── Dry run ──────────────────────────────────────────────────────────────
 
 if [ "$DRY_RUN" = true ]; then
+  SC_FILES=$(_find_changed_sh_files "$PROJECT_DIR")
+  SC_COUNT=0
+  if [ -n "$SC_FILES" ]; then
+    SC_COUNT=$(echo "$SC_FILES" | grep -c . || true)
+  fi
   python3 -c "
 import json, sys
-d = {'dry_run': True, 'test_command': sys.argv[1], 'message': 'would run test command (dry-run mode)'}
+d = {
+    'dry_run': True,
+    'test_command': sys.argv[1],
+    'message': 'would run test command (dry-run mode)',
+    'shellcheck': {
+        'would_check': int(sys.argv[2]),
+        'skip_shellcheck': sys.argv[3] == 'true',
+        'shellcheck_available': sys.argv[4] == 'true'
+    }
+}
 print(json.dumps(d))
-" "$TEST_CMD"
+" "$TEST_CMD" "$SC_COUNT" "$SKIP_SHELLCHECK" "$(command -v shellcheck &>/dev/null && echo true || echo false)"
   exit 0
 fi
 
@@ -168,6 +278,17 @@ fi
 PASSED=false
 [ "$EXIT_CODE" -eq 0 ] && PASSED=true
 
+# ── Run shellcheck ───────────────────────────────────────────────────────
+
+SC_RESULT=$(_run_shellcheck "$PROJECT_DIR" "$SKIP_SHELLCHECK")
+
+# Check if shellcheck failed and update overall passed status
+SC_PASSED=$(python3 -c "import json,sys; print('true' if json.loads(sys.argv[1]).get('passed',True) else 'false')" "$SC_RESULT")
+OVERALL_PASSED="$PASSED"
+if [ "$SC_PASSED" = "false" ]; then
+  OVERALL_PASSED=false
+fi
+
 # ── Structured JSON output ───────────────────────────────────────────────
 
 python3 -c "
@@ -179,6 +300,7 @@ duration = round(end - start, 1)
 passed = sys.argv[3] == 'true'
 test_cmd = sys.argv[4]
 timed_out = sys.argv[5] == 'true'
+sc_result = json.loads(sys.argv[7])
 
 # Read output from stdin to handle arbitrary content
 output = sys.stdin.read()
@@ -194,10 +316,11 @@ d = {
     'passed': passed,
     'test_command': test_cmd,
     'output': output,
-    'duration_seconds': duration
+    'duration_seconds': duration,
+    'shellcheck': sc_result
 }
 print(json.dumps(d))
-" "$START_TIME" "$END_TIME" "$PASSED" "$TEST_CMD" "$TIMED_OUT" "$TIMEOUT" <<< "$OUTPUT"
+" "$START_TIME" "$END_TIME" "$OVERALL_PASSED" "$TEST_CMD" "$TIMED_OUT" "$TIMEOUT" "$SC_RESULT" <<< "$OUTPUT"
 
 # Exit with appropriate code
-[ "$PASSED" = true ] && exit 0 || exit 1
+[ "$OVERALL_PASSED" = true ] && exit 0 || exit 1

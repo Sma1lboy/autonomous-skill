@@ -61,7 +61,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/detect-framework.sh` — Auto-detect project framework/stack from marker files (package.json, Cargo.toml, go.mod, etc.)
 - `scripts/build-worker-hints.sh` — Build worker hints block from detection + optional `.autonomous/skill-config.json` overrides
 - `scripts/cleanup-workers.sh` — Kill registered tmux worker windows (shared by write-summary + evaluate-sprint)
-- `scripts/quality-gate.sh` — Automated build/test verification after sprint merge (uses detect-framework.sh, supports skill-config.json override)
+- `scripts/quality-gate.sh` — Automated build/test verification after sprint merge (uses detect-framework.sh, supports skill-config.json override, shellcheck integration)
 - `scripts/session-resume.sh` — Detect and resume halted autonomous sessions (reads conductor-state.json, validates branch)
 - `scripts/cost-tracker.sh` — Track costs per sprint and session total (record, check budget, parse output, report)
 - `scripts/shutdown.sh` — Graceful shutdown propagation: C-c to tmux workers, wait, force-kill survivors, write shutdown-reason.json
@@ -159,12 +159,13 @@ bash tests/test_merge_sprint.sh       # 25 tests: merge/discard logic, branch cl
 bash tests/test_evaluate_sprint.sh    # 24 tests: summary reading, state updates
 bash tests/test_conversations.sh      # 56 tests: comms round-trip, cross-attention quality
 bash tests/test_error_handling.sh     # 33 tests: corrupt JSON, atomic writes, monitor timeouts
-bash tests/test_quality_gate.sh      # 56 tests: quality gate verification, framework detection, config override, integration
+bash tests/test_quality_gate.sh      # 76 tests: quality gate verification, framework detection, config override, shellcheck integration
 bash tests/test_session_resume.sh    # 42 tests: resume detection, branch validation, --resume/--fresh flags, edge cases
 bash tests/test_cost_tracker.sh      # 60 tests: record, check budget, parse-output, report, accumulation, integration
 bash tests/test_shutdown.sh          # 63 tests: graceful shutdown, signal propagation, monitor integration, JSON output
 bash tests/test_session_diff.sh      # 79 tests: diff summary, commit categorization, test detection, JSON/markdown output, session-report integration
 bash tests/test_retry_strategy.sh    # 60 tests: retry analysis, 3-strike rule, adjusted direction, retry-mark, get-sprint, count, edge cases
+bash tests/test_dispatch_timeout.sh  # 28 tests: worker timeout enforcement, env/config override, timeout exit handling, monitor detection
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
