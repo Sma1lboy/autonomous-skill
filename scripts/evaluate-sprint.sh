@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # evaluate-sprint.sh — Read sprint summary, update conductor state, close tmux
 #
 # Usage: bash evaluate-sprint.sh <project_dir> <script_dir> <sprint_num> [last_commit]
@@ -8,6 +8,7 @@
 #   SUMMARY=<text>
 #   DIR_COMPLETE=<true|false>
 #   PHASE=<directed|exploring>
+# Layer: conductor
 
 set -euo pipefail
 
@@ -38,12 +39,7 @@ if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
 fi
 
 # Kill registered worker windows
-if [ -f "$PROJECT_DIR/.autonomous/worker-windows.txt" ]; then
-  while IFS= read -r win; do
-    tmux kill-window -t "$win" 2>/dev/null || true
-  done < "$PROJECT_DIR/.autonomous/worker-windows.txt"
-  rm -f "$PROJECT_DIR/.autonomous/worker-windows.txt"
-fi
+bash "$SCRIPT_DIR/scripts/cleanup-workers.sh" "$PROJECT_DIR"
 
 # Parse summary or construct fallback
 if [ -f "$SUMMARY_FILE" ]; then

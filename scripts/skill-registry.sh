@@ -2,6 +2,7 @@
 # skill-registry.sh — Manage a registry of AI-readable skill metadata.
 # Skills are stored as individual JSON files in .autonomous/skill-registry/.
 # Supports registration, listing, querying, prompt generation, and scanning.
+# Layer: shared
 
 set -euo pipefail
 

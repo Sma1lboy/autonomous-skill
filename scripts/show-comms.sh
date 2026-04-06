@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # show-comms.sh — Display archived comms logs from past sprints
 #
 # Usage: bash show-comms.sh <project_dir> <sprint_num>
@@ -7,6 +7,7 @@
 # Reads .autonomous/comms-archive/sprint-{N}.json and pretty-prints it.
 # Also shows per-worker archives (sprint-{N}-worker-{id}.json).
 # --list shows all archived sprint numbers and worker files.
+# Layer: shared
 
 set -euo pipefail
 

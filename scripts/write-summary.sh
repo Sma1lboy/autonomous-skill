@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # write-summary.sh — Write sprint-summary.json from git state
 #
 # Usage: bash write-summary.sh <project_dir> <status> <summary> [iterations] [direction_complete] [sprint_num]
 #
 # Generates sprint-summary.json with recent commits from git log.
 # If sprint_num is provided, archives comms.json to comms-archive/sprint-{N}.json.
+# Layer: sprint-master
 
 set -euo pipefail
 
@@ -75,11 +76,5 @@ if [ -n "$SPRINT_NUM" ]; then
 fi
 
 # Kill registered worker windows
-if [ -f "$PROJECT_DIR/.autonomous/worker-windows.txt" ]; then
-  if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
-    while IFS= read -r win; do
-      tmux kill-window -t "$win" 2>/dev/null || true
-    done < "$PROJECT_DIR/.autonomous/worker-windows.txt"
-  fi
-  rm -f "$PROJECT_DIR/.autonomous/worker-windows.txt"
-fi
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SELF_DIR/cleanup-workers.sh" "$PROJECT_DIR"

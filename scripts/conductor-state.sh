@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # conductor-state.sh — State management for the multi-sprint conductor.
 # Manages .autonomous/conductor-state.json with atomic writes and PID locking.
+# Layer: conductor
 
 set -euo pipefail
 

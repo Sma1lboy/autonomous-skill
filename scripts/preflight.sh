@@ -3,6 +3,7 @@
 # Verifies required tools are present before the conductor starts.
 # Exit 0 if all good (or only optional deps missing).
 # Exit 1 only if `claude` CLI is missing (the one critical dependency).
+# Layer: shared
 
 set -euo pipefail
 

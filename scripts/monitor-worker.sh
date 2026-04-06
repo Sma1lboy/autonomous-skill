@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # monitor-worker.sh — Poll for worker completion via comms.json + tmux/process liveness
 #
 # Usage: bash monitor-worker.sh <project_dir> [window_name] [worker_pid] [worker-id]
@@ -13,6 +13,7 @@
 #
 # --all mode: scans all comms-worker-*.json files, returns when ANY worker
 # has status "waiting" or "done". Output includes WORKER_ID=<id>.
+# Layer: sprint-master
 
 set -euo pipefail
 

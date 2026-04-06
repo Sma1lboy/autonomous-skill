@@ -2,6 +2,7 @@
 # detect-framework.sh — Auto-detect project framework/stack from marker files.
 # Outputs JSON with framework, test/lint/build commands, and detected tools.
 # Used by build-worker-hints.sh to generate worker hints.
+# Layer: shared
 
 set -euo pipefail
 

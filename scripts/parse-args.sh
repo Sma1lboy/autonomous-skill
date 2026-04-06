@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # parse-args.sh — Parse skill args into MAX_SPRINTS and DIRECTION
 #
 # Usage: eval "$(bash parse-args.sh "$ARGS")"
@@ -6,6 +6,7 @@
 # Output (for eval):
 #   _MAX_SPRINTS=<number|unlimited>
 #   _DIRECTION=<string>
+# Layer: conductor
 
 show_help() {
   echo "Usage: eval \"\$(bash parse-args.sh \"\$ARGS\")\""

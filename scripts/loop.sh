@@ -3,6 +3,7 @@
 # In the master mind architecture, SKILL.md IS the master.
 # This script is only needed when running outside of CC's skill system
 # (e.g., direct bash invocation for testing).
+# Layer: conductor
 set -euo pipefail
 
 die() { echo "ERROR: $*" >&2; exit 1; }

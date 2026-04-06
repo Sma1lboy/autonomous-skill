@@ -3,6 +3,7 @@
 # and optional .autonomous/skill-config.json overrides.
 # Output: multi-line text block suitable for injection into worker prompts.
 # If framework is "unknown" and no config exists, outputs nothing (empty stdout).
+# Layer: shared
 
 set -euo pipefail
 

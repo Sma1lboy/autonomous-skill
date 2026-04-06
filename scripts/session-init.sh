@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # session-init.sh — Create session branch, init conductor state + backlog
 #
 # Usage: bash session-init.sh <project_dir> <script_dir> <direction> <max_sprints>
 #
 # Output: SESSION_BRANCH=<branch_name>
+# Layer: conductor
 
 set -euo pipefail
 

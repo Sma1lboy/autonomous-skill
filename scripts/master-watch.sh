@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Master watch — monitors both comms.json AND worker activity
+# Layer: shared
 
 set -euo pipefail
 

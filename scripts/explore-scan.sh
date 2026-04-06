@@ -2,6 +2,7 @@
 # explore-scan.sh — Scan a project and score all 8 exploration dimensions.
 # Called by the Conductor (SKILL.md) before explore-pick to replace blind
 # priority-order selection with data-driven scoring.
+# Layer: conductor
 
 set -euo pipefail
 

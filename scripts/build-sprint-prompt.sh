@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # build-sprint-prompt.sh — Build sprint-prompt.md by inlining SPRINT.md + params
 #
 # Usage: bash build-sprint-prompt.sh <project_dir> <script_dir> <sprint_num> <direction> [prev_summary]
 #
 # Output: writes .autonomous/sprint-prompt.md
+# Layer: conductor
 
 set -euo pipefail
 

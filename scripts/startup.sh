@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # startup.sh — Resolve SCRIPT_DIR, display project context
 #
 # Usage: eval "$(bash scripts/startup.sh [project_dir])"
@@ -6,6 +6,7 @@
 #
 # When eval'd, exports SCRIPT_DIR. When run directly, prints project context.
 # Shared by conductor (SKILL.md) and sprint master (SPRINT.md).
+# Layer: shared
 
 show_help() {
   echo "Usage: bash startup.sh [project_dir]"
@@ -30,7 +31,7 @@ _SELF="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}"
 SCRIPT_DIR="$(dirname "$(dirname "$_SELF")")"
 
 if [ ! -d "$SCRIPT_DIR/scripts" ]; then
-  for dir in ~/.claude/skills/autonomous-skill /Volumes/ssd/i/auto-tool-workspace/autonomous-skill; do
+  for dir in ~/.claude/skills/autonomous-skill ${AUTONOMOUS_SKILL_DIR:-}; do
     if [ -d "$dir/scripts" ]; then SCRIPT_DIR="$dir"; break; fi
   done
 fi

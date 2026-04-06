@@ -1,9 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # merge-sprint.sh — Merge or discard a sprint branch
 #
 # Usage: bash merge-sprint.sh <session_branch> <sprint_branch> <sprint_num> <status> <summary>
 #
 # Switches to session branch, merges if sprint had commits, cleans up sprint branch.
+# Layer: conductor
 
 set -euo pipefail
 

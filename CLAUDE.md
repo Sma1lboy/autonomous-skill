@@ -25,24 +25,48 @@ Conductor (SKILL.md, user's CC session)
 
 - `SKILL.md` — Conductor: multi-sprint orchestrator, phase management, exploration strategy
 - `SPRINT.md` — Sprint master: per-sprint execution (Sense->Direct->Respond->Summarize)
-- `scripts/conductor-state.sh` — Conductor state management (atomic writes, PID lock, phase transitions)
+- `OWNER.md.template` — Template for manual persona configuration
+- `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
+
+#### Conductor layer scripts (used by SKILL.md)
+
+- `scripts/conductor-state.sh` — State management (atomic writes, PID lock, phase transitions)
+- `scripts/session-init.sh` — Create session branch, init conductor state + backlog
+- `scripts/parse-args.sh` — Parse skill args into MAX_SPRINTS and DIRECTION
+- `scripts/build-sprint-prompt.sh` — Build sprint-prompt.md by inlining SPRINT.md + params
+- `scripts/evaluate-sprint.sh` — Read sprint summary, update conductor state, close tmux
+- `scripts/merge-sprint.sh` — Merge or discard a sprint branch
 - `scripts/explore-scan.sh` — Project scanner: scores 8 exploration dimensions via bash heuristics
-- `scripts/backlog.sh` — Cross-session persistent backlog (progressive disclosure, mkdir locking, max 50 items)
-- `scripts/persona.sh` — Two-tier OWNER.md: global owner (`~/.autonomous/owner.md` or `AUTONOMOUS_OWNER`) + per-project generation from git history + project docs
-- `scripts/preflight.sh` — Dependency checker: validates runtime environment before conductor starts
-- `scripts/session-report.sh` — Session-end report generator: table, detail, and JSON output from sprint summaries
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
+- `scripts/monitor-sprint.sh` — Poll for sprint completion via summary file + tmux liveness
+
+#### Sprint master layer scripts (used by SPRINT.md)
+
+- `scripts/dispatch.sh` — Launch a claude -p session in tmux or headless background
+- `scripts/monitor-worker.sh` — Poll for worker completion via comms.json + tmux/process liveness
+- `scripts/write-summary.sh` — Write sprint-summary.json from git state
+
+#### Shared infrastructure scripts (used by multiple layers)
+
+- `scripts/startup.sh` — Resolve SCRIPT_DIR, display project context
+- `scripts/preflight.sh` — Dependency checker: validates runtime environment before conductor starts
+- `scripts/persona.sh` — Two-tier OWNER.md: global owner (`~/.autonomous/owner.md` or `AUTONOMOUS_OWNER`) + per-project generation from git history + project docs
+- `scripts/session-report.sh` — Session-end report generator: table, detail, and JSON output from sprint summaries
+- `scripts/backlog.sh` — Cross-session persistent backlog (progressive disclosure, mkdir locking, max 50 items)
+- `scripts/show-comms.sh` — Display archived comms logs from past sprints
 - `scripts/master-poll.sh` — Manual master polling for comms.json
 - `scripts/master-watch.sh` — Dual-channel monitor (comms + session JSONL)
 - `scripts/skill-registry.sh` — Skill registry: register, list, get, prompt-block, scan, unregister skills in `.autonomous/skill-registry/`
+- `scripts/detect-framework.sh` — Auto-detect project framework/stack from marker files (package.json, Cargo.toml, go.mod, etc.)
+- `scripts/build-worker-hints.sh` — Build worker hints block from detection + optional `.autonomous/skill-config.json` overrides
+- `scripts/cleanup-workers.sh` — Kill registered tmux worker windows (shared by write-summary + evaluate-sprint)
+
+#### Skills
+
 - `.claude/skills/test-worker/SKILL.md` — Test skill: spawns worker + auto-answering master
 - `.claude/skills/clean-sandbox/SKILL.md` — Reset test sandbox
 - `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
-- `OWNER.md.template` — Template for manual persona configuration
-- `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
-- `scripts/detect-framework.sh` — Auto-detect project framework/stack from marker files (package.json, Cargo.toml, go.mod, etc.)
-- `scripts/build-worker-hints.sh` — Build worker hints block from detection + optional `.autonomous/skill-config.json` overrides
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
 
 ## How it works

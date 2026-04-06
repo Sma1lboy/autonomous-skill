@@ -4,6 +4,7 @@
 #
 # Invariant: This script NEVER touches conductor-state.json.
 # conductor-state.sh NEVER touches backlog.json. No cross-lock acquisition.
+# Layer: shared
 
 set -euo pipefail
 

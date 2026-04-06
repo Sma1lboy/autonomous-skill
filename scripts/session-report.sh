@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # session-report.sh — Generate a session-end report from sprint summary files.
 # Reads sprint summaries, produces a compact table, and supports detail/JSON modes.
+# Layer: shared
 
 set -euo pipefail
 

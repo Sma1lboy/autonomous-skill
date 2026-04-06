@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Master polling loop — runs in a separate terminal
+# Layer: shared
 
 set -euo pipefail
 

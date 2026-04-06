@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # dispatch.sh — Launch a claude -p session in tmux or headless background
 #
 # Usage: bash dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]
@@ -10,6 +10,7 @@
 # with {"status":"idle"} for per-worker comms isolation.
 #
 # Output: Prints launch status. Sets DISPATCH_PID for headless mode.
+# Layer: sprint-master
 
 set -euo pipefail
 

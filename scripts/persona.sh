@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # persona.sh — Generate OWNER.md from git history and project docs if it doesn't exist
 # Supports two-tier owner: global (~/.autonomous/owner.md) + per-project OWNER.md
+# Layer: shared
 set -euo pipefail
 
 usage() {
