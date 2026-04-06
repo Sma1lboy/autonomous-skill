@@ -162,7 +162,7 @@ trap 'rm -rf "$RESULTS_DIR"' EXIT
 
 for run in $(seq 1 "$NUM_RUNS"); do
   echo "Run $run/$NUM_RUNS..." >&2
-  eval "$TEST_CMD" 2>/dev/null > "$RESULTS_DIR/run-$run.txt" || true
+  bash -c "$TEST_CMD" 2>/dev/null > "$RESULTS_DIR/run-$run.txt" || true
 done
 
 # ── Aggregate results via python3 (avoids bash 4 associative arrays) ─────

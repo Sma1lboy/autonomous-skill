@@ -71,7 +71,7 @@ cmd_record() {
   [ "$sprint_num" -gt 0 ] || die "sprint-num must be > 0, got: $sprint_num"
 
   # Validate cost is a number
-  python3 -c "float('$cost')" 2>/dev/null || die "cost-usd must be numeric, got: $cost"
+  python3 -c "import sys; float(sys.argv[1])" "$cost" 2>/dev/null || die "cost-usd must be numeric, got: $cost"
 
   local state_file="$project/.autonomous/conductor-state.json"
   [ -f "$state_file" ] || die "No conductor-state.json found at $state_file"
@@ -127,7 +127,7 @@ cmd_check() {
   [ -z "$max_cost" ] && die "Usage: cost-tracker.sh check <project-dir> <max-cost-usd>"
 
   # Validate max_cost is a number
-  python3 -c "float('$max_cost')" 2>/dev/null || die "max-cost-usd must be numeric, got: $max_cost"
+  python3 -c "import sys; float(sys.argv[1])" "$max_cost" 2>/dev/null || die "max-cost-usd must be numeric, got: $max_cost"
 
   local state_file="$project/.autonomous/conductor-state.json"
   [ -f "$state_file" ] || die "No conductor-state.json found at $state_file"
