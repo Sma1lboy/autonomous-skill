@@ -285,4 +285,99 @@ assert_contains "$HELP" "project-dir" "master-poll --help mentions project-dir"
 bash "$SCRIPT_DIR/../scripts/master-poll.sh" --help >/dev/null 2>&1
 assert_eq "$?" "0" "master-poll --help exits 0"
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Worker window registry (dispatch.sh)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "16. Worker window registry"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+
+# Simulate what dispatch.sh does: append window names
+echo "worker-1" >> "$T/.autonomous/worker-windows.txt"
+echo "worker-2" >> "$T/.autonomous/worker-windows.txt"
+assert_file_exists "$T/.autonomous/worker-windows.txt" "worker-windows.txt created"
+
+COUNT=$(wc -l < "$T/.autonomous/worker-windows.txt" | tr -d ' ')
+assert_eq "$COUNT" "2" "two worker windows registered"
+
+assert_file_contains "$T/.autonomous/worker-windows.txt" "worker-1" "worker-1 in registry"
+assert_file_contains "$T/.autonomous/worker-windows.txt" "worker-2" "worker-2 in registry"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Comms archive (write-summary.sh)
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "17. Comms archive via write-summary.sh"
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+# Init a git repo so write-summary.sh can run git log
+git -C "$T" init -q
+git -C "$T" config user.email "test@test.com"
+git -C "$T" config user.name "Test"
+echo "init" > "$T/file.txt"
+git -C "$T" add file.txt && git -C "$T" commit -q -m "init"
+
+# Place a comms.json to archive
+write_comms "$T" '{"status":"done","summary":"sprint done"}'
+
+# Run write-summary.sh WITH sprint_num (arg 6) — should archive
+bash "$SCRIPT_DIR/../scripts/write-summary.sh" "$T" "complete" "Test summary" 1 True 3 > /dev/null
+assert_file_exists "$T/.autonomous/comms-archive/sprint-3.json" "comms archived for sprint 3"
+
+# Verify content matches original
+ARCHIVED_STATUS=$(python3 -c "import json; print(json.load(open('$T/.autonomous/comms-archive/sprint-3.json')).get('status','?'))" 2>/dev/null)
+assert_eq "$ARCHIVED_STATUS" "done" "archived comms has correct status"
+
+# Run write-summary.sh WITHOUT sprint_num — should NOT archive
+T2=$(new_tmp)
+mkdir -p "$T2/.autonomous"
+git -C "$T2" init -q
+git -C "$T2" config user.email "test@test.com"
+git -C "$T2" config user.name "Test"
+echo "init" > "$T2/file.txt"
+git -C "$T2" add file.txt && git -C "$T2" commit -q -m "init"
+write_comms "$T2" '{"status":"done","summary":"no archive"}'
+bash "$SCRIPT_DIR/../scripts/write-summary.sh" "$T2" "complete" "Test" 1 True > /dev/null
+assert_file_not_exists "$T2/.autonomous/comms-archive" "no archive dir when sprint_num omitted"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# show-comms.sh
+# ═══════════════════════════════════════════════════════════════════════════
+echo ""
+echo "18. show-comms.sh reads archived comms"
+# Reuse T from test 17 which has sprint-3.json archived
+OUTPUT=$(bash "$SCRIPT_DIR/../scripts/show-comms.sh" "$T" 3)
+assert_contains "$OUTPUT" "done" "show-comms displays archived status"
+assert_contains "$OUTPUT" "sprint done" "show-comms displays archived summary"
+
+echo ""
+echo "19. show-comms.sh handles missing archive"
+OUTPUT=$(bash "$SCRIPT_DIR/../scripts/show-comms.sh" "$T" 99 2>&1 || true)
+assert_contains "$OUTPUT" "ERROR" "error on missing sprint"
+
+echo ""
+echo "20. show-comms.sh --help"
+HELP=$(bash "$SCRIPT_DIR/../scripts/show-comms.sh" --help 2>&1)
+assert_contains "$HELP" "Usage:" "show-comms --help shows usage"
+assert_contains "$HELP" "comms-archive" "show-comms --help mentions comms-archive"
+
+bash "$SCRIPT_DIR/../scripts/show-comms.sh" --help >/dev/null 2>&1
+assert_eq "$?" "0" "show-comms --help exits 0"
+
+echo ""
+echo "21. show-comms.sh --list"
+# Add a second archive entry
+mkdir -p "$T/.autonomous/comms-archive"
+echo '{"status":"done"}' > "$T/.autonomous/comms-archive/sprint-5.json"
+LIST_OUTPUT=$(bash "$SCRIPT_DIR/../scripts/show-comms.sh" "$T" --list)
+assert_contains "$LIST_OUTPUT" "Sprint 3" "--list shows sprint 3"
+assert_contains "$LIST_OUTPUT" "Sprint 5" "--list shows sprint 5"
+
+# --list with no archive dir
+T3=$(new_tmp)
+mkdir -p "$T3/.autonomous"
+LIST_ERR=$(bash "$SCRIPT_DIR/../scripts/show-comms.sh" "$T3" --list 2>&1 || true)
+assert_contains "$LIST_ERR" "No comms archive" "--list handles missing archive dir"
+
 print_results

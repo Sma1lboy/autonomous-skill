@@ -52,11 +52,13 @@ chmod +x "$WRAPPER"
 # Dispatch in tmux (visible to user) or headless background
 if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
   tmux new-window -n "$WINDOW_NAME" "bash $WRAPPER"
+  echo "$WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
   echo "DISPATCH_MODE=tmux"
   echo "Launched in tmux window '$WINDOW_NAME'"
 else
   bash "$WRAPPER" > "$PROJECT_DIR/.autonomous/${WINDOW_NAME}-output.log" 2>&1 &
   DISPATCH_PID=$!
+  echo "$WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
   echo "DISPATCH_MODE=headless"
   echo "DISPATCH_PID=$DISPATCH_PID"
   echo "PID: $DISPATCH_PID"
