@@ -87,11 +87,11 @@ if [ "${2:-}" = "--all" ]; then
         echo "WORKER_ID=$WID"
         if [ "$STATUS" = "done" ]; then
           echo "=== WORKER DONE ($WID) ==="
-          python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$f" 2>/dev/null
+          jq '.' "$f" 2>/dev/null
           echo "WORKER_DONE"
         else
           echo "=== COMMS: WORKER ASKING ($WID) ==="
-          python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$f" 2>/dev/null
+          jq '.' "$f" 2>/dev/null
           echo "WORKER_ASKING"
         fi
         exit 0
@@ -140,14 +140,14 @@ while true; do
 
     if [ "$STATUS" = "done" ]; then
       echo "=== WORKER DONE ==="
-      python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
+      jq '.' "$COMMS_FILE" 2>/dev/null
       echo "WORKER_DONE"
       exit 0
     fi
 
     if [ "$STATUS" = "waiting" ]; then
       echo "=== COMMS: WORKER ASKING ==="
-      python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
+      jq '.' "$COMMS_FILE" 2>/dev/null
       echo "WORKER_ASKING"
       exit 0
     fi
@@ -158,17 +158,10 @@ while true; do
     if ! tmux list-windows 2>/dev/null | grep -q "$WINDOW_NAME"; then
       # Check if worker timed out (comms file contains WORKER_TIMEOUT)
       if [ -f "$COMMS_FILE" ]; then
-        _timeout_summary=$(python3 -c "import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-    s = d.get('summary','')
-    if 'WORKER_TIMEOUT' in s: print('yes')
-    else: print('no')
-except Exception: print('no')
-" "$COMMS_FILE" 2>/dev/null || echo "no")
+        _timeout_summary=$(jq -r 'if (.summary // "") | test("WORKER_TIMEOUT") then "yes" else "no" end' "$COMMS_FILE" 2>/dev/null || echo "no")
         if [ "$_timeout_summary" = "yes" ]; then
           echo "=== WORKER TIMEOUT ==="
-          python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
+          jq '.' "$COMMS_FILE" 2>/dev/null
           echo "WORKER_TIMEOUT"
           exit 0
         fi
@@ -194,17 +187,10 @@ except Exception: print('no')
     if ! kill -0 "$WORKER_PID" 2>/dev/null; then
       # Check if worker timed out (comms file contains WORKER_TIMEOUT)
       if [ -f "$COMMS_FILE" ]; then
-        _timeout_summary=$(python3 -c "import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-    s = d.get('summary','')
-    if 'WORKER_TIMEOUT' in s: print('yes')
-    else: print('no')
-except Exception: print('no')
-" "$COMMS_FILE" 2>/dev/null || echo "no")
+        _timeout_summary=$(jq -r 'if (.summary // "") | test("WORKER_TIMEOUT") then "yes" else "no" end' "$COMMS_FILE" 2>/dev/null || echo "no")
         if [ "$_timeout_summary" = "yes" ]; then
           echo "=== WORKER TIMEOUT ==="
-          python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
+          jq '.' "$COMMS_FILE" 2>/dev/null
           echo "WORKER_TIMEOUT"
           exit 0
         fi
