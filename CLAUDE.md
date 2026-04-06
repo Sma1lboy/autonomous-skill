@@ -34,6 +34,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
 - `scripts/master-poll.sh` — Manual master polling for comms.json
 - `scripts/master-watch.sh` — Dual-channel monitor (comms + session JSONL)
+- `scripts/skill-registry.sh` — Skill registry: register, list, get, prompt-block, scan, unregister skills in `.autonomous/skill-registry/`
 - `.claude/skills/test-worker/SKILL.md` — Test skill: spawns worker + auto-answering master
 - `.claude/skills/clean-sandbox/SKILL.md` — Reset test sandbox
 - `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
@@ -118,6 +119,7 @@ bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, 
 bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
 bash tests/test_detect_framework.sh # 71 tests: framework detection for node/react/next/vue/angular/rust/go/python/ruby/java/bash
 bash tests/test_worker_hints.sh # 48 tests: hints block generation, config overrides, partial merges, edge cases
+bash tests/test_skill_registry.sh # 91 tests: register, list, get, prompt-block, scan, unregister, edge cases, CLI help
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
 
