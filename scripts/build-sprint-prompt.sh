@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # build-sprint-prompt.sh — Build sprint-prompt.md by inlining SPRINT.md + params
 #
-# Usage: bash build-sprint-prompt.sh <project_dir> <script_dir> <sprint_num> <direction> [prev_summary]
+# Usage: bash build-sprint-prompt.sh [--compact] <project_dir> <script_dir> <sprint_num> <direction> [prev_summary]
 #
 # Output: writes .autonomous/sprint-prompt.md
 # Layer: conductor
@@ -9,11 +9,21 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: bash build-sprint-prompt.sh <project_dir> <script_dir> <sprint_num> <direction> [prev_summary]"
+  echo "Usage: bash build-sprint-prompt.sh [--compact] <project_dir> <script_dir> <sprint_num> <direction> [prev_summary]"
   echo ""
   echo "Build the sprint master prompt by inlining SPRINT.md with sprint parameters."
   echo "Writes to <project_dir>/.autonomous/sprint-prompt.md"
+  echo ""
+  echo "Options:"
+  echo "  --compact  Minimal prompt: header + SPRINT.md file path (no inlining)"
+  echo "  --help     Show this help"
 }
+
+COMPACT=false
+if [ "${1:-}" = "--compact" ]; then
+  COMPACT=true
+  shift
+fi
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
   usage
@@ -34,18 +44,35 @@ fi
 # Get title-only backlog for sprint master context (lightweight, no descriptions)
 BACKLOG_TITLES=$(bash "$SCRIPT_DIR/scripts/backlog.sh" list "$PROJECT_DIR" open titles-only 2>/dev/null || echo "")
 
-# Use printf instead of echo — echo mangles content starting with -n/-e or containing \c
-{
-  printf '%s\n' "You are a sprint master. Follow the instructions below exactly."
-  printf '\n'
-  printf '%s\n' "SCRIPT_DIR: $SCRIPT_DIR"
-  printf '%s\n' "PROJECT: $PROJECT_DIR"
-  printf '%s\n' "SPRINT_NUMBER: $SPRINT_NUM"
-  printf '%s\n' "SPRINT_DIRECTION: $SPRINT_DIRECTION"
-  printf '%s\n' "PREVIOUS_SUMMARY: $PREV_SUMMARY"
-  printf '%s\n' "BACKLOG_TITLES: $BACKLOG_TITLES"
-  printf '\n'
-  cat "$SCRIPT_DIR/SPRINT.md"
-} > "$PROJECT_DIR/.autonomous/sprint-prompt.md"
+if [ "$COMPACT" = true ]; then
+  # Compact mode: header params + reference to SPRINT.md file (no inlining)
+  {
+    printf '%s\n' "You are a sprint master. Follow the instructions below exactly."
+    printf '\n'
+    printf '%s\n' "SCRIPT_DIR: $SCRIPT_DIR"
+    printf '%s\n' "PROJECT: $PROJECT_DIR"
+    printf '%s\n' "SPRINT_NUMBER: $SPRINT_NUM"
+    printf '%s\n' "SPRINT_DIRECTION: $SPRINT_DIRECTION"
+    printf '%s\n' "PREVIOUS_SUMMARY: $PREV_SUMMARY"
+    printf '%s\n' "BACKLOG_TITLES: $BACKLOG_TITLES"
+    printf '\n'
+    printf '%s\n' "Read your full instructions from: $SCRIPT_DIR/SPRINT.md"
+    printf '%s\n' "Comms protocol reference: $SCRIPT_DIR/scripts/comms-protocol.txt"
+  } > "$PROJECT_DIR/.autonomous/sprint-prompt.md"
+else
+  # Normal mode: full SPRINT.md inlined
+  {
+    printf '%s\n' "You are a sprint master. Follow the instructions below exactly."
+    printf '\n'
+    printf '%s\n' "SCRIPT_DIR: $SCRIPT_DIR"
+    printf '%s\n' "PROJECT: $PROJECT_DIR"
+    printf '%s\n' "SPRINT_NUMBER: $SPRINT_NUM"
+    printf '%s\n' "SPRINT_DIRECTION: $SPRINT_DIRECTION"
+    printf '%s\n' "PREVIOUS_SUMMARY: $PREV_SUMMARY"
+    printf '%s\n' "BACKLOG_TITLES: $BACKLOG_TITLES"
+    printf '\n'
+    cat "$SCRIPT_DIR/SPRINT.md"
+  } > "$PROJECT_DIR/.autonomous/sprint-prompt.md"
+fi
 
 echo "Sprint prompt written to $PROJECT_DIR/.autonomous/sprint-prompt.md"

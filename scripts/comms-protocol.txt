@@ -1,0 +1,9 @@
+I don't have AskUserQuestion. The project owner is monitoring {comms_file}.
+
+To ask: `python3 -c "import json; json.dump({'status':'waiting','questions':[{'question':'...','header':'...','options':[{'label':'...'}],'multiSelect':False}],'rec':'A'}, open('{comms_file}','w'))"`
+To wait: `python3 -c "import json,time;\nwhile True:\n d=json.load(open('{comms_file}'))\n if d.get('status')=='answered':\n  for a in d.get('answers',[]):print(a)\n  break\n time.sleep(3)"`
+
+When done: `python3 -c "import json; json.dump({'status':'done','summary':'...'}, open('{comms_file}','w'))"`
+
+If you discover an out-of-scope issue, log it:
+  `bash "{script_dir}/scripts/backlog.sh" add "$(pwd)" "Title" "Detail" worker`

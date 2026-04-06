@@ -65,6 +65,8 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/quality-gate.sh` — Automated build/test verification after sprint merge (uses detect-framework.sh, supports skill-config.json override, shellcheck integration)
 - `scripts/session-resume.sh` — Detect and resume halted autonomous sessions (reads conductor-state.json, validates branch)
 - `scripts/cost-tracker.sh` — Track costs per sprint and session total (record, check budget, parse output, report)
+- `scripts/measure-prompt.sh` — Measure prompt file size and section breakdown (lines, chars, words, --json)
+- `scripts/comms-protocol.txt` — Standalone comms protocol reference for worker prompts (parameterized with {comms_file}, {script_dir})
 - `scripts/shutdown.sh` — Graceful shutdown propagation: C-c to tmux workers, wait, force-kill survivors, write shutdown-reason.json
 - `scripts/session-diff.sh` — Session diff summary: compare auto/ branch against base, with commit categorization and PR description
 - `scripts/history.sh` — Sprint history viewer: list all auto/ branches with session metadata, detail, compare, JSON output
@@ -156,7 +158,7 @@ bash tests/test_detect_framework.sh   # 71 tests: framework detection for node/r
 bash tests/test_worker_hints.sh       # 48 tests: hints block generation, config overrides, partial merges, edge cases
 bash tests/test_skill_registry.sh     # 91 tests: register, list, get, prompt-block, scan, unregister, edge cases, CLI help
 bash tests/test_parse_args.sh         # 37 tests: argument parsing, sprint count, direction extraction
-bash tests/test_build_sprint_prompt.sh # 22 tests: prompt inlining, parameter substitution
+bash tests/test_build_sprint_prompt.sh # 35 tests: prompt inlining, parameter substitution, --compact flag
 bash tests/test_session_init.sh       # 19 tests: branch creation, state initialization
 bash tests/test_merge_sprint.sh       # 25 tests: merge/discard logic, branch cleanup
 bash tests/test_evaluate_sprint.sh    # 24 tests: summary reading, state updates
@@ -172,6 +174,7 @@ bash tests/test_dispatch_timeout.sh  # 28 tests: worker timeout enforcement, env
 bash tests/test_history.sh           # 113 tests: history viewer listing, detail, compare, JSON, graceful handling, edge cases
 bash tests/test_rate_limiter.sh      # 62 tests: rate limit detection, backoff calculation, recording, reporting, session-report integration
 bash tests/test_stability.sh         # 53 tests: flaky test detection, JSON output, fix mode pattern analysis, real suite validation
+bash tests/test_measure_prompt.sh    # 44 tests: prompt size measurement, section breakdown, JSON output, edge cases
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
