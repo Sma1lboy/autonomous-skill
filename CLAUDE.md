@@ -75,6 +75,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/worktree-manager.sh` — Git worktree lifecycle for sprint isolation (create, destroy, list, merge, cleanup, path)
 - `scripts/metrics.sh` — Cross-session metrics dashboard: collect, show, trend with per-project filtering and JSON output
 - `scripts/config-validator.sh` — Validate .autonomous/skill-config.json: validate, init, migrate, --fix
+- `scripts/learnings.sh` — Cross-session learning system: record sprint outcomes, query history, suggest directions, prune old entries (max 200 FIFO)
 
 #### Skills
 
@@ -184,6 +185,7 @@ bash tests/test_worktree_manager.sh  # worktree lifecycle: create, destroy, list
 bash tests/test_dispatch_worktree.sh # dispatch worktree isolation: env/config override, branch file, backward compat
 bash tests/test_metrics.sh           # 57 tests: collect, show, trend, per-project filtering, JSON output, edge cases
 bash tests/test_config_validator.sh  # 85 tests: validate, init, migrate, --fix, schema checking, edge cases
+bash tests/test_learnings.sh          # 102 tests: record, query, suggest, prune, FIFO overflow, filters, JSON output
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
