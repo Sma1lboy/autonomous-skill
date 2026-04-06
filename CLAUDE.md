@@ -64,6 +64,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/session-resume.sh` — Detect and resume halted autonomous sessions (reads conductor-state.json, validates branch)
 - `scripts/cost-tracker.sh` — Track costs per sprint and session total (record, check budget, parse output, report)
 - `scripts/shutdown.sh` — Graceful shutdown propagation: C-c to tmux workers, wait, force-kill survivors, write shutdown-reason.json
+- `scripts/session-diff.sh` — Session diff summary: compare auto/ branch against base, with commit categorization and PR description
 
 #### Skills
 
@@ -159,6 +160,7 @@ bash tests/test_quality_gate.sh      # 56 tests: quality gate verification, fram
 bash tests/test_session_resume.sh    # 42 tests: resume detection, branch validation, --resume/--fresh flags, edge cases
 bash tests/test_cost_tracker.sh      # 60 tests: record, check budget, parse-output, report, accumulation, integration
 bash tests/test_shutdown.sh          # 63 tests: graceful shutdown, signal propagation, monitor integration, JSON output
+bash tests/test_session_diff.sh      # 79 tests: diff summary, commit categorization, test detection, JSON/markdown output, session-report integration
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 

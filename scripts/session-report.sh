@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
   cat << 'EOF'
-Usage: session-report.sh <project-dir> [--detail N] [--json]
+Usage: session-report.sh <project-dir> [--detail N] [--json] [--diff]
 
 Generate a session report from sprint summary files.
 
@@ -17,17 +17,20 @@ Arguments:
 Options:
   --detail N     Show full detail for sprint N
   --json         Output machine-readable JSON
+  --diff         Append a diff summary (branch vs base) at the end
   -h, --help     Show this help message
 
 Output modes:
   Default: compact table with sprint number, status, commits, rating, summary
   --detail N: full detail for a specific sprint (direction, summary, commits, files)
   --json: machine-readable JSON with all sprint data and totals
+  --diff: appends session-diff.sh output after the normal report
 
 Examples:
   bash scripts/session-report.sh ./my-project
   bash scripts/session-report.sh ./my-project --detail 2
   bash scripts/session-report.sh ./my-project --json
+  bash scripts/session-report.sh ./my-project --diff
 EOF
   exit 0
 }
@@ -42,6 +45,7 @@ esac
 PROJECT_DIR=""
 DETAIL_NUM=""
 JSON_MODE=false
+DIFF_MODE=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -53,6 +57,10 @@ while [ $# -gt 0 ]; do
       ;;
     --json)
       JSON_MODE=true
+      shift
+      ;;
+    --diff)
+      DIFF_MODE=true
       shift
       ;;
     *)
@@ -291,17 +299,36 @@ print(json.dumps(result))
 
 DATA=$(collect_sprints)
 
+# ── Resolve SCRIPT_DIR for sibling scripts ──────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # ── JSON mode ────────────────────────────────────────────────────────────
 
 if [ "$JSON_MODE" = true ]; then
-  # Output clean JSON (without files_list in sprint objects)
-  python3 -c "
+  if [ "$DIFF_MODE" = true ]; then
+    DIFF_JSON=$(bash "$SCRIPT_DIR/session-diff.sh" "$PROJECT_DIR" --json 2>/dev/null || echo '{}')
+    python3 -c "
+import json, sys
+data = json.loads(sys.argv[1])
+for s in data['sprints']:
+    s.pop('files_list', None)
+try:
+    data['diff'] = json.loads(sys.argv[2])
+except Exception:
+    data['diff'] = {}
+print(json.dumps(data, indent=2))
+" "$DATA" "$DIFF_JSON"
+  else
+    # Output clean JSON (without files_list in sprint objects)
+    python3 -c "
 import json, sys
 data = json.loads(sys.argv[1])
 for s in data['sprints']:
     s.pop('files_list', None)
 print(json.dumps(data, indent=2))
 " "$DATA"
+  fi
   exit 0
 fi
 
@@ -389,3 +416,10 @@ cost_line = ', \$' + f'{session_cost:.2f} cost' if session_cost else ''
 print()
 print(f'Total: {totals[\"sprints\"]} sprints, {totals[\"commits\"]} commits, {totals[\"files_changed\"]} files changed{cost_line}')
 " "$DATA"
+
+# ── Append diff summary (text/table mode only) ─────────────────────────
+
+if [ "$DIFF_MODE" = true ]; then
+  echo ""
+  bash "$SCRIPT_DIR/session-diff.sh" "$PROJECT_DIR" 2>/dev/null || true
+fi
