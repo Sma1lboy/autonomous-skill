@@ -170,6 +170,23 @@ while true; do
   # Channel 2: tmux/process liveness check
   if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
     if ! tmux list-windows 2>/dev/null | grep -q "$WINDOW_NAME"; then
+      # Check if worker timed out (comms file contains WORKER_TIMEOUT)
+      if [ -f "$COMMS_FILE" ]; then
+        _timeout_summary=$(python3 -c "import json,sys
+try:
+    d = json.load(open(sys.argv[1]))
+    s = d.get('summary','')
+    if 'WORKER_TIMEOUT' in s: print('yes')
+    else: print('no')
+except Exception: print('no')
+" "$COMMS_FILE" 2>/dev/null || echo "no")
+        if [ "$_timeout_summary" = "yes" ]; then
+          echo "=== WORKER TIMEOUT ==="
+          python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
+          echo "WORKER_TIMEOUT"
+          exit 0
+        fi
+      fi
       echo "=== WORKER WINDOW CLOSED ==="
       echo "WORKER_WINDOW_CLOSED"
       exit 0
@@ -189,6 +206,23 @@ while true; do
     echo "=== COMMS: ${STATUS:-idle} ==="
   elif [ -n "$WORKER_PID" ]; then
     if ! kill -0 "$WORKER_PID" 2>/dev/null; then
+      # Check if worker timed out (comms file contains WORKER_TIMEOUT)
+      if [ -f "$COMMS_FILE" ]; then
+        _timeout_summary=$(python3 -c "import json,sys
+try:
+    d = json.load(open(sys.argv[1]))
+    s = d.get('summary','')
+    if 'WORKER_TIMEOUT' in s: print('yes')
+    else: print('no')
+except Exception: print('no')
+" "$COMMS_FILE" 2>/dev/null || echo "no")
+        if [ "$_timeout_summary" = "yes" ]; then
+          echo "=== WORKER TIMEOUT ==="
+          python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
+          echo "WORKER_TIMEOUT"
+          exit 0
+        fi
+      fi
       echo "=== WORKER PROCESS EXITED ==="
       tail -30 "$PROJECT_DIR/.autonomous/${WINDOW_NAME}-output.log" 2>/dev/null
       echo "WORKER_PROCESS_EXITED"

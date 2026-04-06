@@ -58,6 +58,38 @@ fi
 SAFE_WINDOW_NAME=$(printf '%s' "$WINDOW_NAME" | tr -cd 'a-zA-Z0-9_-')
 [ -z "$SAFE_WINDOW_NAME" ] && SAFE_WINDOW_NAME="worker"
 
+# ── Determine worker timeout ─────────────────────────────────────────────
+# Priority: skill-config.json > WORKER_TIMEOUT env var > default 600s
+WORKER_TIMEOUT_SECS="${WORKER_TIMEOUT:-600}"
+CONFIG_FILE="$PROJECT_DIR/.autonomous/skill-config.json"
+if [ -f "$CONFIG_FILE" ] && command -v python3 &>/dev/null; then
+  CFG_TIMEOUT=$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    v = d.get('worker_timeout')
+    if v is not None and isinstance(v, int) and v > 0:
+        print(v)
+except Exception:
+    pass
+" "$CONFIG_FILE" 2>/dev/null || true)
+  [ -n "$CFG_TIMEOUT" ] && WORKER_TIMEOUT_SECS="$CFG_TIMEOUT"
+fi
+
+# Validate timeout is a positive integer
+if ! [[ "$WORKER_TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "WARNING: invalid WORKER_TIMEOUT '$WORKER_TIMEOUT_SECS', using default 600" >&2
+  WORKER_TIMEOUT_SECS=600
+fi
+
+# Determine comms file path for timeout handler
+if [ -n "$WORKER_ID" ]; then
+  COMMS_PATH="$PROJECT_DIR/.autonomous/comms-${WORKER_ID}.json"
+else
+  COMMS_PATH="$PROJECT_DIR/.autonomous/comms.json"
+fi
+
 # Create wrapper script — tmux cannot use claude -p or stdin redirect reliably
 # Use printf %q for safe shell-escaping of paths
 WRAPPER="$PROJECT_DIR/.autonomous/run-${SAFE_WINDOW_NAME}.sh"
@@ -66,8 +98,29 @@ WRAPPER="$PROJECT_DIR/.autonomous/run-${SAFE_WINDOW_NAME}.sh"
   printf 'cd %q\n' "$PROJECT_DIR"
   # shellcheck disable=SC2016
   printf 'PROMPT=$(cat %q)\n' "$PROMPT_FILE"
+  # Timeout-wrapped execution with gtimeout fallback for macOS
   # shellcheck disable=SC2016
-  echo 'exec claude --dangerously-skip-permissions "$PROMPT"'
+  printf 'TIMEOUT_CMD=""\n'
+  # shellcheck disable=SC2016
+  printf 'if command -v timeout &>/dev/null; then TIMEOUT_CMD="timeout"; fi\n'
+  # shellcheck disable=SC2016
+  printf 'if [ -z "$TIMEOUT_CMD" ] && command -v gtimeout &>/dev/null; then TIMEOUT_CMD="gtimeout"; fi\n'
+  # shellcheck disable=SC2016
+  printf 'if [ -n "$TIMEOUT_CMD" ]; then\n'
+  # shellcheck disable=SC2016
+  printf '  $TIMEOUT_CMD %s claude --dangerously-skip-permissions "$PROMPT"\n' "$WORKER_TIMEOUT_SECS"
+  # shellcheck disable=SC2016
+  printf '  EXIT_CODE=$?\n'
+  # shellcheck disable=SC2016
+  printf '  if [ "$EXIT_CODE" -eq 124 ]; then\n'
+  printf '    printf '"'"'{"status":"done","summary":"WORKER_TIMEOUT: exceeded %ss limit"}'"'"' > %q\n' "$WORKER_TIMEOUT_SECS" "$COMMS_PATH"
+  printf '  fi\n'
+  # shellcheck disable=SC2016
+  printf '  exit $EXIT_CODE\n'
+  printf 'else\n'
+  # shellcheck disable=SC2016
+  printf '  exec claude --dangerously-skip-permissions "$PROMPT"\n'
+  printf 'fi\n'
 } > "$WRAPPER"
 chmod +x "$WRAPPER"
 
