@@ -29,6 +29,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/explore-scan.sh` — Project scanner: scores 8 exploration dimensions via bash heuristics
 - `scripts/backlog.sh` — Cross-session persistent backlog (progressive disclosure, mkdir locking, max 50 items)
 - `scripts/persona.sh` — Two-tier OWNER.md: global owner (`~/.autonomous/owner.md` or `AUTONOMOUS_OWNER`) + per-project generation from git history + project docs
+- `scripts/preflight.sh` — Dependency checker: validates runtime environment before conductor starts
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
 - `scripts/master-poll.sh` — Manual master polling for comms.json
 - `scripts/master-watch.sh` — Dual-channel monitor (comms + session JSONL)
@@ -102,8 +103,9 @@ Cross-session persistent work queue in `.autonomous/backlog.json`:
 ## Testing
 
 ```bash
+bash tests/test_preflight.sh    # 48 tests: dependency checks, install hints, --setup, version detection, tmux status
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
-bash tests/test_comms.sh        # 34 tests: comms.json protocol, master-watch/master-poll CLI help
+bash tests/test_comms.sh        # 50 tests: comms.json protocol, master-watch/master-poll CLI help
 bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
 bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
 bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help

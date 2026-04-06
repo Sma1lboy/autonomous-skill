@@ -16,6 +16,7 @@ if [ ! -d "$SCRIPT_DIR/scripts" ]; then
   done
 fi
 bash "$SCRIPT_DIR/scripts/persona.sh" "$(pwd)" >/dev/null 2>&1
+bash "$SCRIPT_DIR/scripts/preflight.sh" || { echo "Preflight failed. Fix the issues above, then retry."; exit 1; }
 bash "$SCRIPT_DIR/scripts/startup.sh" "$(pwd)"
 ```
 
