@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash evaluate-sprint.sh <project_dir> <script_dir> <sprint_num> [last_commit]"
   echo ""
   echo "Read sprint summary JSON (or construct from git log), update conductor state."
@@ -20,7 +20,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

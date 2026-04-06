@@ -58,10 +58,12 @@ command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found"
 CMD="${1:-}"
 PROJECT="${2:-.}"
 REGISTRY_DIR="$PROJECT/.autonomous/skill-registry"
+MAX_CAP_LENGTH=100
+MAX_SUMMARY_LENGTH=200
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 ensure_registry() {
   mkdir -p "$REGISTRY_DIR"
@@ -119,7 +121,7 @@ try:
             m = re.match(r'^#{2,}\s+(.+)', line.strip())
             if m:
                 cap = m.group(1).strip()
-                if cap and len(cap) < 100:
+                if cap and len(cap) < $MAX_CAP_LENGTH:
                     caps.append(cap)
 except FileNotFoundError:
     pass
@@ -151,7 +153,7 @@ except FileNotFoundError:
     pass
 
 if lines:
-    summary = ' '.join(lines)[:200]
+    summary = ' '.join(lines)[:$MAX_SUMMARY_LENGTH]
     print(summary)
 else:
     print('')

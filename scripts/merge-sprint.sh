@@ -8,14 +8,14 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash merge-sprint.sh <session_branch> <sprint_branch> <sprint_num> <status> <summary>"
   echo ""
   echo "Merge sprint branch into session branch (if commits exist), then clean up."
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

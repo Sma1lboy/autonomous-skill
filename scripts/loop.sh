@@ -6,7 +6,7 @@
 # Layer: conductor
 set -euo pipefail
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 usage() {
   cat << 'EOF'

@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash build-sprint-prompt.sh <project_dir> <script_dir> <sprint_num> <direction> [prev_summary]"
   echo ""
   echo "Build the sprint master prompt by inlining SPRINT.md with sprint parameters."
@@ -16,7 +16,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

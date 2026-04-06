@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash write-summary.sh <project_dir> <status> <summary> [iterations] [direction_complete] [sprint_num]"
   echo ""
   echo "Write sprint-summary.json with recent commits and sprint results."
@@ -25,7 +25,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

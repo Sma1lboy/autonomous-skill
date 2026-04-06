@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash monitor-worker.sh <project_dir> [window_name] [worker_pid] [worker-id]"
   echo "       bash monitor-worker.sh <project_dir> --all"
   echo ""
@@ -41,29 +41,14 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 
 # Max poll iterations before timeout (default ~225 = ~30 min at 8s intervals)
 MAX_POLLS="${MONITOR_MAX_POLLS:-225}"
 
-# Helper: read comms JSON status safely.
-# Outputs one of: idle, waiting, done, answered, CORRUPT
-# Distinguishes "file is idle" from "file is unreadable/corrupt"
-_read_comms_status() {
-  local file="$1"
-  [ -f "$file" ] || { echo "idle"; return 0; }
-  local result
-  result=$(python3 -c "import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-    print(d.get('status','idle'))
-except (json.JSONDecodeError, ValueError, KeyError):
-    print('CORRUPT')
-" "$file" 2>/dev/null) || { echo "CORRUPT"; return 0; }
-  echo "$result"
-}
+source "$(dirname "${BASH_SOURCE[0]}")/comms-lib.sh"
 
 PROJECT_DIR="${1:?Usage: monitor-worker.sh <project_dir> [window_name] [worker_pid] [worker-id]}"
 
@@ -80,7 +65,7 @@ if [ "${2:-}" = "--all" ]; then
     fi
     for f in "$PROJECT_DIR"/.autonomous/comms-worker-*.json; do
       [ -f "$f" ] || continue
-      STATUS=$(_read_comms_status "$f")
+      STATUS=$(_read_comms_status "$f" "idle")
       if [ "$STATUS" = "CORRUPT" ]; then
         ((_all_corrupt_streak++)) || true
         echo "WARNING: corrupt comms file: $f (streak: $_all_corrupt_streak)" >&2
@@ -140,7 +125,7 @@ while true; do
   fi
 
   # Check comms.json status
-  STATUS=$(_read_comms_status "$COMMS_FILE")
+  STATUS=$(_read_comms_status "$COMMS_FILE" "idle")
 
   if [ "$STATUS" = "CORRUPT" ]; then
     ((_CORRUPT_STREAK++)) || true
