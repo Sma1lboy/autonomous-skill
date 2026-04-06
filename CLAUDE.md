@@ -63,6 +63,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/quality-gate.sh` — Automated build/test verification after sprint merge (uses detect-framework.sh, supports skill-config.json override)
 - `scripts/session-resume.sh` — Detect and resume halted autonomous sessions (reads conductor-state.json, validates branch)
 - `scripts/cost-tracker.sh` — Track costs per sprint and session total (record, check budget, parse output, report)
+- `scripts/shutdown.sh` — Graceful shutdown propagation: C-c to tmux workers, wait, force-kill survivors, write shutdown-reason.json
 
 #### Skills
 
@@ -157,6 +158,7 @@ bash tests/test_error_handling.sh     # 33 tests: corrupt JSON, atomic writes, m
 bash tests/test_quality_gate.sh      # 56 tests: quality gate verification, framework detection, config override, integration
 bash tests/test_session_resume.sh    # 42 tests: resume detection, branch validation, --resume/--fresh flags, edge cases
 bash tests/test_cost_tracker.sh      # 60 tests: record, check budget, parse-output, report, accumulation, integration
+bash tests/test_shutdown.sh          # 63 tests: graceful shutdown, signal propagation, monitor integration, JSON output
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 

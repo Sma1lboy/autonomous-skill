@@ -32,6 +32,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/comms-lib.sh"
 SUMMARY_FILE="$PROJECT_DIR/.autonomous/sprint-$SPRINT_NUM-summary.json"
 GENERIC_FILE="$PROJECT_DIR/.autonomous/sprint-summary.json"
 COMMS_FILE="$PROJECT_DIR/.autonomous/comms.json"
+SHUTDOWN_FILE="$PROJECT_DIR/.autonomous/shutdown-reason.json"
 
 # Record comms.json mtime at monitor start — only accept changes AFTER this point
 COMMS_MTIME_AT_START=""
@@ -73,6 +74,12 @@ while true; do
   ((_POLL_COUNT++)) || true
   if [ "$_POLL_COUNT" -gt "$MAX_POLLS" ]; then
     echo "=== SPRINT $SPRINT_NUM MONITOR TIMEOUT (${MAX_POLLS} polls) ==="
+    break
+  fi
+
+  # Check for shutdown marker file
+  if [ -f "$SHUTDOWN_FILE" ]; then
+    echo "=== SPRINT $SPRINT_NUM SHUTDOWN ==="
     break
   fi
 
