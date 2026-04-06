@@ -72,6 +72,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/session-diff.sh` — Session diff summary: compare auto/ branch against base, with commit categorization and PR description
 - `scripts/history.sh` — Sprint history viewer: list all auto/ branches with session metadata, detail, compare, JSON output
 - `scripts/test-stability.sh` — Flaky test detection: run tests N times, identify inconsistent pass/fail, static analysis for flakiness patterns
+- `scripts/worktree-manager.sh` — Git worktree lifecycle for sprint isolation (create, destroy, list, merge, cleanup, path)
 
 #### Skills
 
@@ -177,6 +178,8 @@ bash tests/test_rate_limiter.sh      # 62 tests: rate limit detection, backoff c
 bash tests/test_stability.sh         # 53 tests: flaky test detection, JSON output, fix mode pattern analysis, real suite validation
 bash tests/test_measure_prompt.sh    # 44 tests: prompt size measurement, section breakdown, JSON output, edge cases
 bash tests/test_selective_merge.sh   # 158 tests: selective merge/cherry-pick, squash, dry-run, interactive, conflict handling
+bash tests/test_worktree_manager.sh  # worktree lifecycle: create, destroy, list, merge, cleanup, path, sanitization
+bash tests/test_dispatch_worktree.sh # dispatch worktree isolation: env/config override, branch file, backward compat
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
