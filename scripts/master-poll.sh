@@ -5,7 +5,7 @@ set -euo pipefail
 
 usage() {
   cat << 'EOF'
-Usage: master-poll.sh [project-dir]
+Usage: master-poll.sh [project-dir] [worker-id]
 
 Interactive polling loop for answering worker questions.
 Run this in a separate terminal while a worker is active.
@@ -13,10 +13,14 @@ Run this in a separate terminal while a worker is active.
 Continuously polls .autonomous/comms.json for worker questions.
 When a question arrives, displays it and waits for your answer.
 
+If worker-id is provided, polls .autonomous/comms-{worker-id}.json
+instead of comms.json for per-worker comms isolation.
+
 Arguments:
   project-dir   Path to the project (default: current directory)
+  worker-id     Worker identifier (optional; monitors per-worker comms file)
 
-Requires: .autonomous/comms.json must exist (worker must be running).
+Requires: comms file must exist (worker must be running).
 Press Ctrl+C to stop.
 EOF
   exit 0
@@ -30,7 +34,14 @@ esac
 command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
 
 PROJECT="${1:-.}"
-COMMS="$PROJECT/.autonomous/comms.json"
+WORKER_ID="${2:-}"
+
+# Determine which comms file to poll
+if [ -n "$WORKER_ID" ]; then
+  COMMS="$PROJECT/.autonomous/comms-${WORKER_ID}.json"
+else
+  COMMS="$PROJECT/.autonomous/comms.json"
+fi
 
 if [ ! -f "$COMMS" ]; then
   echo "ERROR: $COMMS not found" >&2
@@ -74,7 +85,7 @@ DISPLAY
 
   # Get master's answer
   echo ""
-  read -p "  Answer (letter + optional note): " ANSWER
+  read -rp "  Answer (letter + optional note): " ANSWER
 
   # Write answer (use sys.argv to avoid injection via quotes in ANSWER)
   python3 -c "
