@@ -59,6 +59,51 @@ fi
 SAFE_WINDOW_NAME=$(printf '%s' "$WINDOW_NAME" | tr -cd 'a-zA-Z0-9_-')
 [ -z "$SAFE_WINDOW_NAME" ] && SAFE_WINDOW_NAME="worker"
 
+# ── Determine dispatch isolation mode ────────────────────────────────────
+# Priority: skill-config.json > DISPATCH_ISOLATION env var > default "branch"
+DISPATCH_ISOLATION="${DISPATCH_ISOLATION:-branch}"
+CONFIG_FILE="$PROJECT_DIR/.autonomous/skill-config.json"
+if [ -f "$CONFIG_FILE" ] && command -v python3 &>/dev/null; then
+  CFG_ISOLATION=$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    v = d.get('dispatch_isolation')
+    if v in ('branch', 'worktree'):
+        print(v)
+except Exception:
+    pass
+" "$CONFIG_FILE" 2>/dev/null || true)
+  [ -n "$CFG_ISOLATION" ] && DISPATCH_ISOLATION="$CFG_ISOLATION"
+fi
+
+# Validate isolation mode
+if [[ "$DISPATCH_ISOLATION" != "branch" && "$DISPATCH_ISOLATION" != "worktree" ]]; then
+  echo "WARNING: invalid DISPATCH_ISOLATION '$DISPATCH_ISOLATION', using default 'branch'" >&2
+  DISPATCH_ISOLATION="branch"
+fi
+
+# ── Worktree setup (if isolation=worktree) ───────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKTREE_PATH=""
+WORKER_CD_DIR="$PROJECT_DIR"
+
+if [ "$DISPATCH_ISOLATION" = "worktree" ]; then
+  WORKTREE_BRANCH="auto/worker-${SAFE_WINDOW_NAME}"
+  WT_OUT=$(bash "$SCRIPT_DIR/worktree-manager.sh" create "$PROJECT_DIR" "$WORKTREE_BRANCH" 2>&1) || {
+    echo "ERROR: worktree creation failed: $WT_OUT" >&2
+    exit 1
+  }
+  WORKTREE_PATH=$(echo "$WT_OUT" | grep '^WORKTREE_PATH=' | head -1 | cut -d= -f2-)
+  WORKER_CD_DIR="$WORKTREE_PATH"
+  # Record worktree branch for later cleanup/merge
+  echo "$WORKTREE_BRANCH" > "$PROJECT_DIR/.autonomous/worker-worktree-${SAFE_WINDOW_NAME}.txt"
+  echo "DISPATCH_ISOLATION=worktree"
+  echo "WORKTREE_BRANCH=$WORKTREE_BRANCH"
+  echo "WORKTREE_PATH=$WORKTREE_PATH"
+fi
+
 # ── Determine worker timeout ─────────────────────────────────────────────
 # Priority: skill-config.json > WORKER_TIMEOUT env var > default 600s
 WORKER_TIMEOUT_SECS="${WORKER_TIMEOUT:-600}"
@@ -96,7 +141,7 @@ fi
 WRAPPER="$PROJECT_DIR/.autonomous/run-${SAFE_WINDOW_NAME}.sh"
 {
   echo '#!/bin/bash'
-  printf 'cd %q\n' "$PROJECT_DIR"
+  printf 'cd %q\n' "$WORKER_CD_DIR"
   # shellcheck disable=SC2016
   printf 'PROMPT=$(cat %q)\n' "$PROMPT_FILE"
   # Timeout-wrapped execution with gtimeout fallback for macOS
