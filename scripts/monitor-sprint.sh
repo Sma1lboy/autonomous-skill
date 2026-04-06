@@ -71,7 +71,8 @@ _generate_summary_from_comms() {
   commits_json=$(printf '%s\n' "$commits" | jq -R '[., inputs] | map(select(. != ""))' 2>/dev/null || echo '[]')
   jq -n --arg summary "$comms_summary" --argjson commits "$commits_json" \
     '{"status":"complete","commits":$commits,"summary":$summary,"iterations_used":1,"direction_complete":true}' \
-    > "$SUMMARY_FILE"
+    > "${SUMMARY_FILE}.tmp"
+  mv -f "${SUMMARY_FILE}.tmp" "$SUMMARY_FILE"
 }
 
 _POLL_COUNT=0
