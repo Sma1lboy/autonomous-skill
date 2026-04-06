@@ -57,7 +57,9 @@ Conductor (SKILL.md, user's CC session)
      code quality, etc.) and generates exploration sprint directions
    - **Backlog fallback**: when exploration dimensions are all solid, conductor
      picks from the persistent backlog (`.autonomous/backlog.json`) before stopping
-6. Session ends when all sprints used up, project feels solid, and backlog is empty
+6. **Session wrap-up**: conductor classifies all commits into Feature A/B/C groups
+   using sprint directions, writes `.autonomous/session-summary.md` with a PR description
+7. Session ends when all sprints used up, project feels solid, and backlog is empty
 
 ## Comms Protocol
 

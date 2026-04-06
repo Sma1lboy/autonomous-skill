@@ -348,6 +348,82 @@ Continue to the next sprint. Stop when:
 - If a sprint can't make progress twice on the same direction, move on.
 - Keep going until sprints are used up or the project genuinely feels solid.
 
+## Session Wrap-up — Feature Classification
+
+**MANDATORY.** Before stopping, regardless of why the session ended (max sprints,
+project solid, no weak dimensions, or graceful shutdown), generate a structured
+session summary that classifies work into features.
+
+### 1. Gather data
+
+```bash
+echo "=== SESSION COMMITS ==="
+git log main..$SESSION_BRANCH --oneline --no-merges
+echo "=== CONDUCTOR STATE ==="
+bash "$SCRIPT_DIR/scripts/conductor-state.sh" read "$(pwd)" 2>/dev/null || echo "STATE_UNAVAILABLE"
+```
+
+**If zero commits:** Write a minimal summary to `.autonomous/session-summary.md`:
+"Session completed with no commits. N sprints attempted, none produced mergeable
+work." Print it. Then stop. Skip the rest of this section.
+
+**If conductor state unavailable:** Fall back to grouping commits by semantic
+similarity using `git log` alone (no sprint-based grouping).
+
+### 2. Classify commits into features
+
+Use sprint directions from `conductor-state.json` as the primary grouping axis:
+
+- Each sprint direction = candidate feature
+- Merge sprints that target the same logical feature (e.g., two sprints both
+  about "backlog" become one Feature)
+- Name each feature concisely: "Backlog System", not "Implement cross-session
+  persistent backlog with progressive disclosure"
+- Map commits to sprints using merge commit messages. The conductor merges
+  sprint branches with `git merge --no-ff -m "sprint N: $SUMMARY"`. Commits
+  between two sprint merge boundaries belong to that sprint.
+- Include fix/test/refactor commits under the feature they support
+- Orphan commits (not between any sprint merge boundaries) go under "Housekeeping"
+- Label features alphabetically: Feature A, Feature B, Feature C...
+
+### 3. Write session-summary.md
+
+Write to `.autonomous/session-summary.md` and print to the user:
+
+```markdown
+## Session Summary — $SESSION_BRANCH
+
+**Sprints:** N | **Commits:** N | **Status:** complete/partial
+
+### Feature A: [Concise Name]
+> [1-sentence description of what this feature does]
+- `hash` commit message
+- `hash` commit message
+
+### Feature B: [Concise Name]
+> [1-sentence description]
+- `hash` commit message
+
+### Housekeeping
+- `hash` chore/docs commits
+
+---
+
+## PR Description
+
+### What changed
+[1 paragraph summarizing all features]
+
+### Features
+- **Feature A:** [name] — [1 sentence]
+- **Feature B:** [name] — [1 sentence]
+
+### Testing
+[List test-related commits or note "no tests added"]
+```
+
+The PR Description block is ready to copy-paste into a pull request.
+
 ## Begin
 
 Start now. Feel the project. Plan your first sprint direction. Dispatch.
