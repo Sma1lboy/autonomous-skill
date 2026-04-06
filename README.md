@@ -22,7 +22,7 @@ Total cost: $4.20. No meetings required.<br>
 A self-driving project agent for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 Drop it into any git repo, run `/autonomous-skill`, go to sleep.
 
-[Quickstart](#quickstart) · [Architecture](#architecture) · [How It Works](#how-it-works) · [Configuration](#configuration) · [Safety](#safety) · [Testing](#testing)
+[Quickstart](#quickstart) · [Architecture](#architecture) · [Features](#features) · [How It Works](#how-it-works) · [Configuration](#configuration) · [Safety](#safety) · [Testing](#testing)
 
 </div>
 
@@ -76,6 +76,19 @@ Conductor (SKILL.md — runs in user's Claude Code session)
 ```
 
 Each layer runs in its own Claude session — fresh context per sprint, no bleed between layers.
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| **Framework detection** | Auto-detects project stack (Node/React/Next/Vue/Angular/Rust/Go/Python/Ruby/Java/Bash) from marker files, generates worker hints |
+| **Skill registry** | Register, list, query, and scan AI-readable skill metadata in `.autonomous/skill-registry/` |
+| **Multi-worker dispatch** | Concurrent workers with per-worker comms isolation (`comms-{worker-id}.json`) |
+| **Preflight checks** | Validates runtime environment (claude CLI, tmux, git) before conductor starts, with `--setup` mode |
+| **Cross-session backlog** | Persistent work queue with progressive disclosure, priority, and auto-pruning (max 50 items) |
+| **Session reports** | Table, detail, and JSON output from sprint summaries with quality ratings |
 
 **Backlog** — A persistent work queue (`.autonomous/backlog.json`) that survives across sessions. Workers log out-of-scope discoveries, the conductor decomposes large missions into deferred items. When exploration runs dry, idle sprints pick from the backlog. Progressive disclosure: sprint masters only see one-line titles, the conductor sees full descriptions.
 
@@ -179,32 +192,55 @@ autonomous-skill/
 ├── CLAUDE.md                         # Project instructions for Claude
 ├── OWNER.md.template                 # Persona template for manual config
 ├── scripts/
-│   ├── startup.sh                    # SCRIPT_DIR resolution + project context (shared)
+│   ├── startup.sh                    # SCRIPT_DIR resolution + project context
+│   ├── common.sh                     # Shared utility functions (die, etc.)
+│   ├── comms-lib.sh                  # Shared comms.json helpers for monitors
+│   ├── preflight.sh                  # Dependency checker: validates runtime environment
 │   ├── parse-args.sh                 # Parse ARGS → _MAX_SPRINTS + _DIRECTION
 │   ├── session-init.sh               # Create session branch, init state + backlog
 │   ├── build-sprint-prompt.sh        # Inline SPRINT.md + params → sprint-prompt.md
+│   ├── conductor-state.sh            # State management (atomic writes, PID lock)
 │   ├── dispatch.sh                   # tmux/headless session dispatch
 │   ├── monitor-sprint.sh             # Poll for sprint-summary.json
 │   ├── monitor-worker.sh             # Poll comms.json + tmux/process liveness
 │   ├── evaluate-sprint.sh            # Read summary JSON, update conductor state
 │   ├── merge-sprint.sh               # Merge or discard sprint branch
 │   ├── write-summary.sh              # Generate sprint-summary.json
-│   ├── conductor-state.sh            # State management (atomic writes, PID lock)
+│   ├── cleanup-workers.sh            # Kill registered tmux worker windows
 │   ├── explore-scan.sh               # 8-dimension project scanner
+│   ├── detect-framework.sh           # Auto-detect project framework/stack
+│   ├── build-worker-hints.sh         # Build worker hints from detection + config
+│   ├── skill-registry.sh             # Register, list, get, scan skills
 │   ├── backlog.sh                    # Cross-session persistent backlog
 │   ├── persona.sh                    # OWNER.md auto-generation
+│   ├── session-report.sh             # Session-end report generator
+│   ├── show-comms.sh                 # Display archived comms logs
 │   ├── loop.sh                       # Standalone launcher (outside CC)
 │   ├── master-poll.sh                # Manual master polling for comms.json
 │   └── master-watch.sh               # Dual-channel monitor (comms + JSONL)
 ├── tests/
-│   ├── test_helpers.sh               # Shared test framework
-│   ├── test_conductor.sh             # 99 tests: state, phase transitions, exploration
-│   ├── test_comms.sh                 # 34 tests: comms.json protocol
-│   ├── test_persona.sh               # 20 tests: OWNER.md generation
+│   ├── test_helpers.sh               # Shared test framework (assertions, temp dirs)
+│   ├── test_conductor.sh             # 94 tests: state, phase transitions, exploration
+│   ├── test_comms.sh                 # 50 tests: comms.json protocol
+│   ├── test_multi_worker.sh          # 98 tests: per-worker comms isolation
+│   ├── test_persona.sh               # 29 tests: OWNER.md generation
 │   ├── test_explore_scan.sh          # 45 tests: dimension scoring heuristics
 │   ├── test_loop.sh                  # 20 tests: standalone launcher
 │   ├── test_backlog.sh               # 76 tests: CRUD, progressive disclosure
-│   └── claude                        # Mock CC binary for testing
+│   ├── test_preflight.sh             # 48 tests: dependency checks, --setup
+│   ├── test_session_report.sh        # 37 tests: table/detail/JSON output
+│   ├── test_detect_framework.sh      # 71 tests: framework detection
+│   ├── test_worker_hints.sh          # 48 tests: hints block generation
+│   ├── test_skill_registry.sh        # 91 tests: skill registry CRUD
+│   ├── test_parse_args.sh            # 37 tests: argument parsing
+│   ├── test_build_sprint_prompt.sh   # 22 tests: prompt inlining
+│   ├── test_session_init.sh          # 19 tests: branch creation, state init
+│   ├── test_merge_sprint.sh          # 25 tests: merge/discard logic
+│   ├── test_evaluate_sprint.sh       # 24 tests: summary reading, state updates
+│   ├── test_conversations.sh         # 56 tests: comms round-trip quality
+│   ├── test_error_handling.sh        # 33 tests: corrupt JSON, atomic writes
+│   ├── claude                        # Mock CC binary for testing
+│   └── timeout                       # Timeout helper binary for tests
 ├── .claude/skills/
 │   ├── test-worker/SKILL.md          # Spawns worker + auto-answering master
 │   ├── capture-worker/SKILL.md       # Capture worker JSONL for inspection
@@ -240,16 +276,29 @@ autonomous-skill/
 
 ## Testing
 
-294 tests across 6 suites, all pure bash:
+~950 tests across 19 suites, all pure bash:
 
 ```bash
-bash tests/test_conductor.sh    # 99 tests
-bash tests/test_comms.sh        # 34 tests
-bash tests/test_persona.sh      # 20 tests
-bash tests/test_explore_scan.sh # 45 tests
-bash tests/test_loop.sh         # 20 tests
-bash tests/test_backlog.sh      # 76 tests
-shellcheck scripts/*.sh         # lint all shell scripts
+bash tests/test_conductor.sh          # 94 tests
+bash tests/test_comms.sh              # 50 tests
+bash tests/test_multi_worker.sh       # 98 tests
+bash tests/test_persona.sh            # 29 tests
+bash tests/test_explore_scan.sh       # 45 tests
+bash tests/test_loop.sh               # 20 tests
+bash tests/test_backlog.sh            # 76 tests
+bash tests/test_preflight.sh          # 48 tests
+bash tests/test_session_report.sh     # 37 tests
+bash tests/test_detect_framework.sh   # 71 tests
+bash tests/test_worker_hints.sh       # 48 tests
+bash tests/test_skill_registry.sh     # 91 tests
+bash tests/test_parse_args.sh         # 37 tests
+bash tests/test_build_sprint_prompt.sh # 22 tests
+bash tests/test_session_init.sh       # 19 tests
+bash tests/test_merge_sprint.sh       # 25 tests
+bash tests/test_evaluate_sprint.sh    # 24 tests
+bash tests/test_conversations.sh      # 56 tests
+bash tests/test_error_handling.sh     # 33 tests
+shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
 The test harness uses `tests/claude` (a mock CC binary) controlled by env vars:

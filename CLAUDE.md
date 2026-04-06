@@ -132,19 +132,26 @@ Cross-session persistent work queue in `.autonomous/backlog.json`:
 ## Testing
 
 ```bash
-bash tests/test_session_report.sh # 37 tests: table/detail/JSON output, ratings, truncation, edge cases, CLI help
-bash tests/test_preflight.sh    # 48 tests: dependency checks, install hints, --setup, version detection, tmux status
-bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
-bash tests/test_comms.sh        # 50 tests: comms.json protocol, master-watch/master-poll CLI help
-bash tests/test_multi_worker.sh # 99 tests: per-worker comms isolation, --all mode, archiving, backward compat
-bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
-bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
-bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
-bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
-bash tests/test_detect_framework.sh # 71 tests: framework detection for node/react/next/vue/angular/rust/go/python/ruby/java/bash
-bash tests/test_worker_hints.sh # 48 tests: hints block generation, config overrides, partial merges, edge cases
-bash tests/test_skill_registry.sh # 91 tests: register, list, get, prompt-block, scan, unregister, edge cases, CLI help
-shellcheck scripts/*.sh         # lint all shell scripts
+bash tests/test_session_report.sh     # 37 tests: table/detail/JSON output, ratings, truncation, edge cases, CLI help
+bash tests/test_preflight.sh          # 48 tests: dependency checks, install hints, --setup, version detection, tmux status
+bash tests/test_conductor.sh          # 94 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
+bash tests/test_comms.sh              # 50 tests: comms.json protocol, master-watch/master-poll CLI help
+bash tests/test_multi_worker.sh       # 98 tests: per-worker comms isolation, --all mode, archiving, backward compat
+bash tests/test_persona.sh            # 29 tests: OWNER.md generation, CLI help
+bash tests/test_explore_scan.sh       # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
+bash tests/test_loop.sh               # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
+bash tests/test_backlog.sh            # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
+bash tests/test_detect_framework.sh   # 71 tests: framework detection for node/react/next/vue/angular/rust/go/python/ruby/java/bash
+bash tests/test_worker_hints.sh       # 48 tests: hints block generation, config overrides, partial merges, edge cases
+bash tests/test_skill_registry.sh     # 91 tests: register, list, get, prompt-block, scan, unregister, edge cases, CLI help
+bash tests/test_parse_args.sh         # 37 tests: argument parsing, sprint count, direction extraction
+bash tests/test_build_sprint_prompt.sh # 22 tests: prompt inlining, parameter substitution
+bash tests/test_session_init.sh       # 19 tests: branch creation, state initialization
+bash tests/test_merge_sprint.sh       # 25 tests: merge/discard logic, branch cleanup
+bash tests/test_evaluate_sprint.sh    # 24 tests: summary reading, state updates
+bash tests/test_conversations.sh      # 56 tests: comms round-trip, cross-attention quality
+bash tests/test_error_handling.sh     # 33 tests: corrupt JSON, atomic writes, monitor timeouts
+shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
 Test harness uses `tests/claude` (mock CC binary) controlled by env vars:

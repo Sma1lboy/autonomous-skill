@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Master polling loop — runs in a separate terminal
+# Usage: master-poll.sh [project-dir] [worker-id]
 # Layer: shared
 
 set -euo pipefail
