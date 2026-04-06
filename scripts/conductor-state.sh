@@ -85,6 +85,7 @@ case "${1:-}" in
 esac
 
 command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
+command -v jq &>/dev/null || { echo "ERROR: jq required but not found" >&2; exit 1; }
 
 CMD="${1:-}"
 PROJECT="${2:-.}"
@@ -133,15 +134,11 @@ read_state() {
     return 0
   fi
   local content
-  content=$(python3 -c "
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        d = json.load(f)
-    json.dump(d, sys.stdout)
-except (json.JSONDecodeError, FileNotFoundError):
-    sys.exit(1)
-" "$STATE_FILE" 2>/dev/null) || { echo "{}"; return 0; }
+  content=$(jq -c '.' "$STATE_FILE" 2>/dev/null) || { echo "{}"; return 0; }
+  if [ -z "$content" ]; then
+    echo "{}"
+    return 0
+  fi
   echo "$content"
 }
 
@@ -150,33 +147,23 @@ read_state_strict() {
   if [ ! -f "$STATE_FILE" ]; then
     return 1
   fi
-  python3 -c "
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        d = json.load(f)
-    json.dump(d, sys.stdout)
-except (json.JSONDecodeError, FileNotFoundError):
-    sys.exit(1)
-" "$STATE_FILE" 2>/dev/null || return 1
+  local content
+  content=$(jq -c '.' "$STATE_FILE" 2>/dev/null) || return 1
+  [ -z "$content" ] && return 1
+  echo "$content"
 }
 
 # Write state atomically via python3 (ensures valid JSON)
 write_state() {
   local json_str="$1"
-  python3 -c "
-import json, sys, os
-try:
-    d = json.loads(sys.argv[1])
-    state_file = sys.argv[2]
-    tmp = state_file + '.tmp.' + str(os.getpid())
-    with open(tmp, 'w') as f:
-        json.dump(d, f, indent=2)
-    os.rename(tmp, state_file)
-except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
-    sys.exit(1)
-" "$json_str" "$STATE_FILE"
+  local tmp="${STATE_FILE}.tmp.$$"
+  echo "$json_str" | jq '.' > "$tmp" 2>/dev/null
+  # Apple jq exits 0 on parse errors — check tmp is non-empty
+  if [ ! -s "$tmp" ]; then
+    rm -f "$tmp"
+    die "write_state: invalid JSON"
+  fi
+  mv -f "$tmp" "$STATE_FILE"
 }
 
 # ── Lock management ───────────────────────────────────────────────────────
@@ -233,7 +220,8 @@ cmd_init() {
   session_id="conductor-$(date +%s)"
   local max_directed
   # 70% of total sprints for directed phase
-  max_directed=$(python3 -c "import sys; print(max(1, int(int(sys.argv[1]) * 0.7)))" "$max_sprints")
+  max_directed=$(( max_sprints * 7 / 10 ))
+  [ "$max_directed" -lt 1 ] && max_directed=1
 
   local state
   state=$(python3 -c "
@@ -295,7 +283,7 @@ print(json.dumps(d))
 
   write_state "$updated"
   # Print sprint number
-  python3 -c "import json,sys; print(len(json.loads(sys.argv[1])['sprints']))" "$updated"
+  echo "$updated" | jq '.sprints | length'
 }
 
 cmd_sprint_end() {
@@ -377,13 +365,13 @@ print(json.dumps(d))
   write_state "$updated"
 
   # Print current phase
-  python3 -c "import json,sys; print(json.loads(sys.argv[1])['phase'])" "$updated"
+  echo "$updated" | jq -r '.phase'
 }
 
 cmd_phase() {
   local state
   state=$(read_state)
-  python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('phase','unknown'))" "$state"
+  echo "$state" | jq -r '.phase // "unknown"'
 }
 
 cmd_explore_pick() {
@@ -422,7 +410,7 @@ cmd_explore_score() {
   local score="${4:-}"
   [ -z "$dimension" ] || [ -z "$score" ] && die "Usage: conductor-state.sh explore-score <project-dir> <dimension> <score>"
   # Validate score is a number (integer or float, including negative)
-  python3 -c "import sys; float(sys.argv[1])" "$score" 2>/dev/null || die "score must be numeric, got: $score"
+  [[ "$score" =~ ^-?[0-9]*\.?[0-9]+$ ]] || die "score must be numeric, got: $score"
   # Validate dimension is known
   local valid_dims="test_coverage error_handling security code_quality documentation architecture performance dx"
   echo "$valid_dims" | grep -qw "$dimension" || die "unknown dimension: $dimension (valid: $valid_dims)"
@@ -473,15 +461,7 @@ if not found:
 
   write_state "$updated"
   # Print new retry_count
-  python3 -c "
-import json, sys
-d = json.loads(sys.argv[1])
-num = int(sys.argv[2])
-for s in d.get('sprints', []):
-    if s['number'] == num:
-        print(s.get('retry_count', 0))
-        break
-" "$updated" "$sprint_num"
+  echo "$updated" | jq --argjson n "$sprint_num" '[.sprints[] | select(.number == $n)][0].retry_count // 0'
 }
 
 cmd_get_sprint() {
@@ -492,16 +472,7 @@ cmd_get_sprint() {
   local state
   state=$(read_state_strict) || die "No conductor state found."
 
-  python3 -c "
-import json, sys
-d = json.loads(sys.argv[1])
-num = int(sys.argv[2])
-for s in d.get('sprints', []):
-    if s['number'] == num:
-        print(json.dumps(s))
-        sys.exit(0)
-print('{}')
-" "$state" "$sprint_num"
+  echo "$state" | jq --argjson n "$sprint_num" '[.sprints[] | select(.number == $n)][0] // {}'
 }
 
 cmd_rate_limit() {
@@ -626,11 +597,7 @@ cmd_get_parallel() {
   local state
   state=$(read_state)
 
-  python3 -c "
-import json, sys
-d = json.loads(sys.argv[1])
-print(json.dumps(d.get('parallel_groups', [])))
-" "$state"
+  echo "$state" | jq -c '.parallel_groups // []'
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────

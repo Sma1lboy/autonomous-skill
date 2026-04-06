@@ -11,12 +11,16 @@ _read_comms_status() {
   local default="${2:-}"
   [ -f "$file" ] || { echo "$default"; return 0; }
   local result
-  result=$(python3 -c "import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-    print(d.get('status',sys.argv[2]))
-except (json.JSONDecodeError, ValueError, KeyError):
-    print('CORRUPT')
-" "$file" "$default" 2>/dev/null) || { echo "CORRUPT"; return 0; }
-  echo "$result"
+  # Apple jq exits 0 on parse errors — detect corrupt via empty output
+  # Use sentinel to distinguish "valid JSON, no status" from "corrupt JSON"
+  result=$(jq -r 'if type == "object" then (.status // "__NOSTATUS__") else "__CORRUPT__" end' "$file" 2>/dev/null)
+  if [ -z "$result" ]; then
+    echo "CORRUPT"
+    return 0
+  fi
+  case "$result" in
+    __NOSTATUS__) echo "$default" ;;
+    __CORRUPT__) echo "CORRUPT" ;;
+    *) echo "$result" ;;
+  esac
 }

@@ -124,32 +124,25 @@ read_backlog() {
     echo '{"version":1,"items":[]}'
     return 0
   fi
-  python3 -c "
-import json, sys
-try:
-    with open(sys.argv[1]) as f:
-        d = json.load(f)
-    json.dump(d, sys.stdout)
-except (json.JSONDecodeError, FileNotFoundError):
-    print('{\"version\":1,\"items\":[]}')
-" "$BACKLOG_FILE" 2>/dev/null || echo '{"version":1,"items":[]}'
+  local content
+  content=$(jq -c '.' "$BACKLOG_FILE" 2>/dev/null) || { echo '{"version":1,"items":[]}'; return 0; }
+  if [ -z "$content" ]; then
+    echo '{"version":1,"items":[]}'
+    return 0
+  fi
+  echo "$content"
 }
 
 write_backlog() {
   local json_str="$1"
-  python3 -c "
-import json, sys, os
-try:
-    d = json.loads(sys.argv[1])
-    bf = sys.argv[2]
-    tmp = bf + '.tmp.' + str(os.getpid())
-    with open(tmp, 'w') as f:
-        json.dump(d, f, indent=2)
-    os.rename(tmp, bf)
-except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
-    sys.exit(1)
-" "$json_str" "$BACKLOG_FILE"
+  local tmp="${BACKLOG_FILE}.tmp.$$"
+  echo "$json_str" | jq '.' > "$tmp" 2>/dev/null
+  # Apple jq exits 0 on parse errors — check tmp is non-empty
+  if [ ! -s "$tmp" ]; then
+    rm -f "$tmp"
+    die "write_backlog: invalid JSON"
+  fi
+  mv -f "$tmp" "$BACKLOG_FILE"
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────
@@ -275,7 +268,7 @@ print(json.dumps(d))
 
   # Extract the item ID from the updated state
   local item_id
-  item_id=$(python3 -c "import json,sys; items=json.loads(sys.argv[1])['items']; print(items[-1]['id'])" "$updated")
+  item_id=$(echo "$updated" | jq -r '.items[-1].id')
 
   write_backlog "$updated"
   echo "$item_id"
@@ -438,7 +431,7 @@ cmd_update() {
       esac
       ;;
     sprint)
-      python3 -c "import sys; int(sys.argv[1])" "$value" 2>/dev/null || die "sprint must be numeric, got: $value"
+      [[ "$value" =~ ^[0-9]+$ ]] || die "sprint must be numeric, got: $value"
       ;;
     triaged)
       case "$value" in
@@ -525,12 +518,7 @@ cmd_prune() {
   local max_age_days="${3:-30}"
 
   # Validate max_age_days
-  python3 -c "
-import sys
-v = int(sys.argv[1])
-if v < 0:
-    raise ValueError('negative')
-" "$max_age_days" 2>/dev/null || die "max-age-days must be a non-negative integer, got: $max_age_days"
+  [[ "$max_age_days" =~ ^[0-9]+$ ]] || die "max-age-days must be a non-negative integer, got: $max_age_days"
 
   backlog_lock
 
@@ -575,11 +563,7 @@ print(json.dumps(d))
   write_backlog "$updated"
 
   local pruned_count
-  pruned_count=$(python3 -c "
-import json, sys
-d = json.loads(sys.argv[1])
-print(sum(1 for i in d['items'] if i.get('status') == 'dropped'))
-" "$updated")
+  pruned_count=$(echo "$updated" | jq '[.items[] | select(.status == "dropped")] | length')
   echo "pruned: checked (dropped items: $pruned_count)"
 }
 

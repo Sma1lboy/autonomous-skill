@@ -65,19 +65,13 @@ _comms_changed_since_start() {
 # Generate sprint-summary.json from comms.json done status
 _generate_summary_from_comms() {
   local comms_summary="$1"
-  python3 -c "
-import json, subprocess, sys
-commits = subprocess.run(['git', 'log', '--oneline', '-5'], capture_output=True, text=True, cwd=sys.argv[1]).stdout.strip().split('\n')
-summary = {
-    'status': 'complete',
-    'commits': [c for c in commits[:5] if c],
-    'summary': sys.argv[2],
-    'iterations_used': 1,
-    'direction_complete': True
-}
-with open(sys.argv[3], 'w') as f:
-    json.dump(summary, f, indent=2)
-" "$PROJECT_DIR" "$comms_summary" "$SUMMARY_FILE" 2>/dev/null
+  local commits
+  commits=$(cd "$PROJECT_DIR" && git log --oneline -5 2>/dev/null | head -5)
+  local commits_json
+  commits_json=$(printf '%s\n' "$commits" | jq -R '[., inputs] | map(select(. != ""))' 2>/dev/null || echo '[]')
+  jq -n --arg summary "$comms_summary" --argjson commits "$commits_json" \
+    '{"status":"complete","commits":$commits,"summary":$summary,"iterations_used":1,"direction_complete":true}' \
+    > "$SUMMARY_FILE"
 }
 
 _POLL_COUNT=0
@@ -126,7 +120,7 @@ while true; do
     else
       _CORRUPT_STREAK=0
       if [ "$COMMS_STATUS" = "done" ]; then
-        COMMS_SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','Sprint completed (summary from comms)'))" "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
+        COMMS_SUMMARY=$(jq -r '.summary // "Sprint completed (summary from comms)"' "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
         # Auto-generate sprint-summary.json from comms.json
         _generate_summary_from_comms "$COMMS_SUMMARY"
         echo "=== SPRINT $SPRINT_NUM COMPLETE (from comms.json fallback) ==="
@@ -155,7 +149,7 @@ while true; do
       if [ -f "$COMMS_FILE" ] && _comms_changed_since_start; then
         COMMS_STATUS=$(_read_comms_status "$COMMS_FILE")
         if [ "$COMMS_STATUS" = "done" ]; then
-          COMMS_SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','Sprint completed'))" "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
+          COMMS_SUMMARY=$(jq -r '.summary // "Sprint completed"' "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
           _generate_summary_from_comms "$COMMS_SUMMARY"
           echo "=== SPRINT $SPRINT_NUM COMPLETE (headless exit + comms fallback) ==="
           cat "$SUMMARY_FILE"
