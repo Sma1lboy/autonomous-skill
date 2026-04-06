@@ -40,6 +40,8 @@ Conductor (SKILL.md, user's CC session)
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
 - `OWNER.md.template` — Template for manual persona configuration
 - `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
+- `scripts/detect-framework.sh` — Auto-detect project framework/stack from marker files (package.json, Cargo.toml, go.mod, etc.)
+- `scripts/build-worker-hints.sh` — Build worker hints block from detection + optional `.autonomous/skill-config.json` overrides
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
 
 ## How it works
@@ -114,6 +116,8 @@ bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
 bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
 bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
 bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
+bash tests/test_detect_framework.sh # 71 tests: framework detection for node/react/next/vue/angular/rust/go/python/ruby/java/bash
+bash tests/test_worker_hints.sh # 48 tests: hints block generation, config overrides, partial merges, edge cases
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
 

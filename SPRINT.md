@@ -55,6 +55,12 @@ You have a specific direction for this sprint. Focus on it.
    - Identifying what specifically needs to change
    - Deciding the right approach based on what you see
 
+   **Detect project stack** — Run framework detection to get worker hints:
+   ```bash
+   WORKER_HINTS=$(bash "$SCRIPT_DIR/scripts/build-worker-hints.sh" "$(pwd)" 2>/dev/null || true)
+   ```
+   If non-empty, include the hints block in the worker prompt (see template below).
+
    Do NOT just forward the conductor's direction to the worker verbatim.
    The conductor says WHAT to do. You figure out HOW after sensing the project.
 
@@ -150,6 +156,7 @@ I received a task from the project owner. Running as `claude -p` (non-interactiv
 Project: {project path}
 Task: {1-3 sentence description — WHAT to do, not HOW}
 Context: {only what the worker can't discover by reading the code}
+{worker_hints}
 
 I don't have AskUserQuestion. The project owner is monitoring {comms_file}.
 
@@ -165,6 +172,10 @@ If you discover an out-of-scope issue, log it:
 Where `{comms_file}` is:
 - `.autonomous/comms.json` for single-worker dispatch (default)
 - `.autonomous/comms-{worker-id}.json` when using per-worker isolation
+
+Where `{worker_hints}` is:
+- The output of `build-worker-hints.sh` (captured during Sense phase)
+- If empty (unknown framework, no config), omit the placeholder entirely
 
 ## Boundaries
 
