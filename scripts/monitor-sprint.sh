@@ -23,6 +23,25 @@ fi
 PROJECT_DIR="${1:?Usage: monitor-sprint.sh <project_dir> <sprint_num>}"
 SPRINT_NUM="${2:?Usage: monitor-sprint.sh <project_dir> <sprint_num>}"
 
+# Max poll iterations before timeout (default ~225 = ~30 min at 8s intervals)
+MAX_POLLS="${MONITOR_MAX_POLLS:-225}"
+
+# Helper: read comms JSON status safely.
+# Outputs one of: idle, waiting, done, answered, CORRUPT, or empty string
+_read_comms_status() {
+  local file="$1"
+  [ -f "$file" ] || { echo ""; return 0; }
+  local result
+  result=$(python3 -c "import json,sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('status',''))
+except (json.JSONDecodeError, ValueError, KeyError):
+    print('CORRUPT')
+" "$file" 2>/dev/null) || { echo "CORRUPT"; return 0; }
+  echo "$result"
+}
+
 SUMMARY_FILE="$PROJECT_DIR/.autonomous/sprint-$SPRINT_NUM-summary.json"
 GENERIC_FILE="$PROJECT_DIR/.autonomous/sprint-summary.json"
 COMMS_FILE="$PROJECT_DIR/.autonomous/comms.json"
@@ -60,7 +79,16 @@ with open(sys.argv[3], 'w') as f:
 " "$PROJECT_DIR" "$comms_summary" "$SUMMARY_FILE" 2>/dev/null
 }
 
+_POLL_COUNT=0
+_CORRUPT_STREAK=0
+
 while true; do
+  ((_POLL_COUNT++)) || true
+  if [ "$_POLL_COUNT" -gt "$MAX_POLLS" ]; then
+    echo "=== SPRINT $SPRINT_NUM MONITOR TIMEOUT (${MAX_POLLS} polls) ==="
+    break
+  fi
+
   # Check for numbered sprint summary file
   if [ -f "$SUMMARY_FILE" ]; then
     echo "=== SPRINT $SPRINT_NUM COMPLETE ==="
@@ -80,14 +108,24 @@ while true; do
   # Check comms.json for worker/sprint-master "done" status (fallback if write-summary.sh was skipped)
   # Only accept if comms.json was modified AFTER monitor started (prevents stale reads)
   if [ -f "$COMMS_FILE" ] && _comms_changed_since_start; then
-    COMMS_STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status',''))" "$COMMS_FILE" 2>/dev/null || echo "")
-    if [ "$COMMS_STATUS" = "done" ]; then
-      COMMS_SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','Sprint completed (summary from comms)'))" "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
-      # Auto-generate sprint-summary.json from comms.json
-      _generate_summary_from_comms "$COMMS_SUMMARY"
-      echo "=== SPRINT $SPRINT_NUM COMPLETE (from comms.json fallback) ==="
-      cat "$SUMMARY_FILE"
-      break
+    COMMS_STATUS=$(_read_comms_status "$COMMS_FILE")
+    if [ "$COMMS_STATUS" = "CORRUPT" ]; then
+      ((_CORRUPT_STREAK++)) || true
+      echo "WARNING: corrupt comms file: $COMMS_FILE (streak: $_CORRUPT_STREAK)" >&2
+      if [ "$_CORRUPT_STREAK" -ge 3 ]; then
+        echo "=== SPRINT $SPRINT_NUM COMMS CORRUPT (3 consecutive) ==="
+        break
+      fi
+    else
+      _CORRUPT_STREAK=0
+      if [ "$COMMS_STATUS" = "done" ]; then
+        COMMS_SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','Sprint completed (summary from comms)'))" "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
+        # Auto-generate sprint-summary.json from comms.json
+        _generate_summary_from_comms "$COMMS_SUMMARY"
+        echo "=== SPRINT $SPRINT_NUM COMPLETE (from comms.json fallback) ==="
+        cat "$SUMMARY_FILE"
+        break
+      fi
     fi
   fi
 
@@ -108,7 +146,7 @@ while true; do
     if ! kill -0 "$HPID" 2>/dev/null; then
       # Process exited — check comms one more time (only if modified since start)
       if [ -f "$COMMS_FILE" ] && _comms_changed_since_start; then
-        COMMS_STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status',''))" "$COMMS_FILE" 2>/dev/null || echo "")
+        COMMS_STATUS=$(_read_comms_status "$COMMS_FILE")
         if [ "$COMMS_STATUS" = "done" ]; then
           COMMS_SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','Sprint completed'))" "$COMMS_FILE" 2>/dev/null || echo "Sprint completed")
           _generate_summary_from_comms "$COMMS_SUMMARY"

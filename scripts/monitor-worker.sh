@@ -44,14 +44,56 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
   exit 0
 fi
 
+# Max poll iterations before timeout (default ~225 = ~30 min at 8s intervals)
+MAX_POLLS="${MONITOR_MAX_POLLS:-225}"
+
+# Helper: read comms JSON status safely.
+# Outputs one of: idle, waiting, done, answered, CORRUPT
+# Distinguishes "file is idle" from "file is unreadable/corrupt"
+_read_comms_status() {
+  local file="$1"
+  [ -f "$file" ] || { echo "idle"; return 0; }
+  local result
+  result=$(python3 -c "import json,sys
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('status','idle'))
+except (json.JSONDecodeError, ValueError, KeyError):
+    print('CORRUPT')
+" "$file" 2>/dev/null) || { echo "CORRUPT"; return 0; }
+  echo "$result"
+}
+
 PROJECT_DIR="${1:?Usage: monitor-worker.sh <project_dir> [window_name] [worker_pid] [worker-id]}"
 
 # --all mode: scan all per-worker comms files
 if [ "${2:-}" = "--all" ]; then
+  _all_polls=0
+  _all_corrupt_streak=0
   while true; do
+    ((_all_polls++)) || true
+    if [ "$_all_polls" -gt "$MAX_POLLS" ]; then
+      echo "=== MONITOR TIMEOUT (${MAX_POLLS} polls) ==="
+      echo "WORKER_DONE"
+      exit 0
+    fi
     for f in "$PROJECT_DIR"/.autonomous/comms-worker-*.json; do
       [ -f "$f" ] || continue
-      STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','idle'))" "$f" 2>/dev/null || echo "idle")
+      STATUS=$(_read_comms_status "$f")
+      if [ "$STATUS" = "CORRUPT" ]; then
+        ((_all_corrupt_streak++)) || true
+        echo "WARNING: corrupt comms file: $f (streak: $_all_corrupt_streak)" >&2
+        if [ "$_all_corrupt_streak" -ge 3 ]; then
+          BASENAME=$(basename "$f" .json)
+          WID="${BASENAME#comms-}"
+          echo "WORKER_ID=$WID"
+          echo "=== COMMS: CORRUPT JSON (3 consecutive) ==="
+          echo "WORKER_ASKING"
+          exit 0
+        fi
+        continue
+      fi
+      _all_corrupt_streak=0
       if [ "$STATUS" = "done" ] || [ "$STATUS" = "waiting" ]; then
         # Extract worker-id from filename: comms-worker-{id}.json -> worker-{id}
         BASENAME=$(basename "$f" .json)
@@ -85,11 +127,30 @@ else
 fi
 
 _LAST_COMMIT=$(cd "$PROJECT_DIR" && git log --oneline -1 2>/dev/null || echo "")
+_POLL_COUNT=0
+_CORRUPT_STREAK=0
 
 while true; do
+  ((_POLL_COUNT++)) || true
+  if [ "$_POLL_COUNT" -gt "$MAX_POLLS" ]; then
+    echo "=== MONITOR TIMEOUT (${MAX_POLLS} polls) ==="
+    echo "WORKER_DONE"
+    exit 0
+  fi
+
   # Check comms.json status
-  if [ -f "$COMMS_FILE" ]; then
-    STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','idle'))" "$COMMS_FILE" 2>/dev/null || echo "idle")
+  STATUS=$(_read_comms_status "$COMMS_FILE")
+
+  if [ "$STATUS" = "CORRUPT" ]; then
+    ((_CORRUPT_STREAK++)) || true
+    echo "WARNING: corrupt comms file: $COMMS_FILE (streak: $_CORRUPT_STREAK)" >&2
+    if [ "$_CORRUPT_STREAK" -ge 3 ]; then
+      echo "=== COMMS: CORRUPT JSON (3 consecutive) ==="
+      echo "WORKER_ASKING"
+      exit 0
+    fi
+  else
+    _CORRUPT_STREAK=0
 
     if [ "$STATUS" = "done" ]; then
       echo "=== WORKER DONE ==="

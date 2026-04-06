@@ -61,7 +61,7 @@ CMD="${1:-}"
 PROJECT="${2:-.}"
 STATE_DIR="$PROJECT/.autonomous"
 STATE_FILE="$STATE_DIR/conductor-state.json"
-LOCK_FILE="$STATE_DIR/conductor.lock"
+LOCK_DIR="$STATE_DIR/conductor.lock"
 
 # ── Cleanup ───────────────────────────────────────────────────────────────
 
@@ -69,11 +69,11 @@ cleanup() {
   # Remove tmp files left by atomic_write or write_state
   rm -f "$STATE_FILE.tmp.$$" 2>/dev/null || true
   # Release lock if we hold it
-  if [ -f "$LOCK_FILE" ] 2>/dev/null; then
-    local lock_pid
-    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+  if [ -d "$LOCK_DIR" ] 2>/dev/null; then
+    local lock_pid=""
+    [ -f "$LOCK_DIR/pid" ] && lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
     if [ "$lock_pid" = "$$" ]; then
-      rm -f "$LOCK_FILE" 2>/dev/null || true
+      rm -rf "$LOCK_DIR" 2>/dev/null || true
     fi
   fi
 }
@@ -83,11 +83,16 @@ trap cleanup EXIT
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-# Atomic write: write to tmp, then mv
+# Atomic write: write to tmp, verify, then mv
 atomic_write() {
   local file="$1" content="$2"
   local tmp="${file}.tmp.$$"
   echo "$content" > "$tmp"
+  # Verify write succeeded (guards against disk full / truncation)
+  if [ ! -s "$tmp" ]; then
+    rm -f "$tmp" 2>/dev/null || true
+    die "atomic_write failed: tmp file empty or missing after write"
+  fi
   mv -f "$tmp" "$file"
 }
 
@@ -149,25 +154,33 @@ except Exception as e:
 
 acquire_lock() {
   mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
-  if [ -f "$LOCK_FILE" ]; then
-    local lock_pid
-    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
-    # Check if lock holder is still alive
-    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
-      die "Another conductor is running (PID $lock_pid). Lock: $LOCK_FILE"
+  # mkdir is POSIX-atomic: only one process can create the directory
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # Lock exists — check if holder is still alive
+    local lock_pid=""
+    if [ -d "$LOCK_DIR" ]; then
+      # New format: PID in lock_dir/pid
+      [ -f "$LOCK_DIR/pid" ] && lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+    elif [ -f "$LOCK_DIR" ]; then
+      # Old format: PID directly in the lock file
+      lock_pid=$(cat "$LOCK_DIR" 2>/dev/null || echo "")
     fi
-    # Stale lock, clean up
-    rm -f "$LOCK_FILE"
+    if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+      die "Another conductor is running (PID $lock_pid). Lock: $LOCK_DIR"
+    fi
+    # Stale lock, break it and re-acquire
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+    mkdir "$LOCK_DIR" 2>/dev/null || die "Cannot acquire conductor lock"
   fi
-  echo $$ > "$LOCK_FILE"
+  echo $$ > "$LOCK_DIR/pid"
 }
 
 release_lock() {
-  if [ -f "$LOCK_FILE" ]; then
-    local lock_pid
-    lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
-    if [ "$lock_pid" = "$$" ]; then
-      rm -f "$LOCK_FILE"
+  if [ -d "$LOCK_DIR" ] 2>/dev/null; then
+    local lock_pid=""
+    [ -f "$LOCK_DIR/pid" ] && lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+    if [ "$lock_pid" = "$$" ] || [ -z "$lock_pid" ]; then
+      rm -rf "$LOCK_DIR" 2>/dev/null || true
     fi
   fi
 }

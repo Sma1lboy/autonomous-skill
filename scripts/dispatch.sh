@@ -36,6 +36,8 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
   exit 0
 fi
 
+command -v claude &>/dev/null || { echo "ERROR: claude CLI not found" >&2; exit 1; }
+
 PROJECT_DIR="${1:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
 PROMPT_FILE="${2:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
 WINDOW_NAME="${3:?Usage: dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]}"
