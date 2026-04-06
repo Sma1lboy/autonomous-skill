@@ -7,7 +7,7 @@ set -euo pipefail
 
 usage() {
   cat << 'EOF'
-Usage: session-report.sh <project-dir> [--detail N] [--json] [--diff]
+Usage: session-report.sh <project-dir> [--detail N] [--json] [--diff] [--merge-plan]
 
 Generate a session report from sprint summary files.
 
@@ -18,6 +18,7 @@ Options:
   --detail N     Show full detail for sprint N
   --json         Output machine-readable JSON
   --diff         Append a diff summary (branch vs base) at the end
+  --merge-plan   Show recommended merge plan with selective-merge command
   -h, --help     Show this help message
 
 Output modes:
@@ -25,12 +26,14 @@ Output modes:
   --detail N: full detail for a specific sprint (direction, summary, commits, files)
   --json: machine-readable JSON with all sprint data and totals
   --diff: appends session-diff.sh output after the normal report
+  --merge-plan: shows recommended sprints and selective-merge command
 
 Examples:
   bash scripts/session-report.sh ./my-project
   bash scripts/session-report.sh ./my-project --detail 2
   bash scripts/session-report.sh ./my-project --json
   bash scripts/session-report.sh ./my-project --diff
+  bash scripts/session-report.sh ./my-project --merge-plan
 EOF
   exit 0
 }
@@ -46,6 +49,7 @@ PROJECT_DIR=""
 DETAIL_NUM=""
 JSON_MODE=false
 DIFF_MODE=false
+MERGE_PLAN=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -61,6 +65,10 @@ while [ $# -gt 0 ]; do
       ;;
     --diff)
       DIFF_MODE=true
+      shift
+      ;;
+    --merge-plan)
+      MERGE_PLAN=true
       shift
       ;;
     *)
@@ -321,6 +329,34 @@ except Exception:
 " "$CONDUCTOR_STATE" 2>/dev/null || echo "[]")
 fi
 
+# ── Compute merge plan data ─────────────────────────────────────────────
+
+MERGE_PLAN_JSON="{}"
+if [ "$MERGE_PLAN" = true ]; then
+  SESSION_BRANCH_NAME=$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || echo "unknown")
+  MERGE_PLAN_JSON=$(python3 -c "
+import json, sys
+
+data = json.loads(sys.argv[1])
+project_dir = sys.argv[2]
+session_branch = sys.argv[3]
+script_dir = sys.argv[4]
+
+sprints = data.get('sprints', [])
+rec = [s['number'] for s in sprints if s.get('rating') == 'recommended']
+
+plan = {
+    'recommended_sprints': rec,
+    'command': ''
+}
+if rec:
+    nums = ','.join(str(n) for n in rec)
+    plan['command'] = f'bash {script_dir}/selective-merge.sh {project_dir} {session_branch} --merge {nums}'
+
+print(json.dumps(plan))
+" "$DATA" "$PROJECT_DIR" "$SESSION_BRANCH_NAME" "$SCRIPT_DIR" 2>/dev/null || echo '{}')
+fi
+
 if [ "$JSON_MODE" = true ]; then
   if [ "$DIFF_MODE" = true ]; then
     DIFF_JSON=$(bash "$SCRIPT_DIR/session-diff.sh" "$PROJECT_DIR" --json 2>/dev/null || echo '{}')
@@ -334,8 +370,11 @@ try:
 except Exception:
     data['diff'] = {}
 data['rate_limits'] = json.loads(sys.argv[3])
+merge_plan = json.loads(sys.argv[4])
+if merge_plan.get('recommended_sprints') is not None:
+    data['merge_plan'] = merge_plan
 print(json.dumps(data, indent=2))
-" "$DATA" "$DIFF_JSON" "$RATE_LIMITS_JSON"
+" "$DATA" "$DIFF_JSON" "$RATE_LIMITS_JSON" "$MERGE_PLAN_JSON"
   else
     # Output clean JSON (without files_list in sprint objects)
     python3 -c "
@@ -344,8 +383,11 @@ data = json.loads(sys.argv[1])
 for s in data['sprints']:
     s.pop('files_list', None)
 data['rate_limits'] = json.loads(sys.argv[2])
+merge_plan = json.loads(sys.argv[3])
+if merge_plan.get('recommended_sprints') is not None:
+    data['merge_plan'] = merge_plan
 print(json.dumps(data, indent=2))
-" "$DATA" "$RATE_LIMITS_JSON"
+" "$DATA" "$RATE_LIMITS_JSON" "$MERGE_PLAN_JSON"
   fi
   exit 0
 fi
@@ -441,6 +483,24 @@ if rl:
     last = rl[-1].get('timestamp', 'unknown')
     print(f'Rate limits: {len(rl)} events (first: {first}, last: {last})')
 " "$DATA" "$RATE_LIMITS_JSON"
+
+# ── Append merge plan (text/table mode only) ──────────────────────────
+
+if [ "$MERGE_PLAN" = true ]; then
+  echo ""
+  python3 -c "
+import json, sys
+plan = json.loads(sys.argv[1])
+rec = plan.get('recommended_sprints', [])
+cmd = plan.get('command', '')
+if rec:
+    nums = ', '.join(str(n) for n in rec)
+    print(f'Merge plan: sprints {nums}')
+    print(f'  {cmd}')
+else:
+    print('Merge plan: no sprints recommended')
+" "$MERGE_PLAN_JSON"
+fi
 
 # ── Append diff summary (text/table mode only) ─────────────────────────
 
