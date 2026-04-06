@@ -71,6 +71,19 @@ You have a specific direction for this sprint. Focus on it.
    bash "$SCRIPT_DIR/scripts/monitor-worker.sh" "$(pwd)" worker
    ```
 
+   **Multi-worker dispatch** (when dispatching multiple workers concurrently):
+   Pass a worker-id as the 4th arg to dispatch.sh and 4th arg to monitor-worker.sh.
+   Each worker gets its own comms file at `.autonomous/comms-{worker-id}.json`.
+
+   ```bash
+   bash "$SCRIPT_DIR/scripts/dispatch.sh" "$(pwd)" .autonomous/worker-1-prompt.md w1 worker-1
+   bash "$SCRIPT_DIR/scripts/dispatch.sh" "$(pwd)" .autonomous/worker-2-prompt.md w2 worker-2
+   bash "$SCRIPT_DIR/scripts/monitor-worker.sh" "$(pwd)" --all
+   ```
+
+   Use `--all` mode on monitor-worker.sh to wait for any worker to finish or ask.
+   The output includes `WORKER_ID=<id>` to identify which worker triggered.
+
    Give the worker one thing to do, not a pipeline:
    - New idea? -> "Run /office-hours. Context: ..."
    - Need implementation? -> "Build this. Design doc at ..."
@@ -87,11 +100,12 @@ You have a specific direction for this sprint. Focus on it.
 3. **Respond** — When the monitor returns, handle the result:
    - **WORKER_DONE**: sprint complete. Proceed to Summarize.
    - **WORKER_ASKING**: read the question, decide using your product
-     intuition, then answer:
+     intuition, then answer (use the worker's comms file path):
      ```bash
-     python3 -c "import json; json.dump({'status':'answered','answers':['A']}, open('.autonomous/comms.json','w'))"
+     python3 -c "import json; json.dump({'status':'answered','answers':['A']}, open('{comms_file}','w'))"
      ```
      Then re-run the monitor: `bash "$SCRIPT_DIR/scripts/monitor-worker.sh" "$(pwd)" worker`
+     (Or in multi-worker mode, re-run with `--all` and handle per-worker comms files.)
    - **WORKER_WINDOW_CLOSED** / **WORKER_PROCESS_EXITED**: worker exited
      unexpectedly. Check git log for commits. Proceed to Summarize.
 
@@ -106,18 +120,29 @@ You have a specific direction for this sprint. Focus on it.
    5. **Explicit over clever** — Obvious 10-line fix beats 200-line abstraction
    6. **Bias toward action** — Approve and move forward. Flag concerns but don't block
 
-4. **Summarize** — When the worker finishes, check git log and diff.
-   Write the sprint summary:
+4. **Summarize** — **CRITICAL: You MUST execute this bash block. The conductor
+   cannot continue without it. If you skip this step, the entire pipeline stalls.**
+
+   When the worker finishes, check git log and diff, then run:
 
    ```bash
    bash "$SCRIPT_DIR/scripts/write-summary.sh" "$(pwd)" "complete" "2-3 sentence summary here"
    ```
+
+   Replace the summary string with your actual 2-3 sentence summary.
+   This writes `sprint-summary.json` which the conductor polls for.
+   **No summary file = conductor hangs forever.** Always run this.
 
 ## Worker Prompt
 
 When you write `.autonomous/worker-prompt.md`, keep it concise.
 Write in first person — you ARE the owner talking to your worker.
 Only include what the worker CAN'T figure out on its own.
+
+When dispatching with a worker-id, use the worker-specific comms path
+(`.autonomous/comms-{worker-id}.json`) in the prompt template below
+instead of `.autonomous/comms.json`. This ensures each worker communicates
+through its own isolated channel.
 
 ```markdown
 I received a task from the project owner. Running as `claude -p` (non-interactive).
@@ -126,16 +151,20 @@ Project: {project path}
 Task: {1-3 sentence description — WHAT to do, not HOW}
 Context: {only what the worker can't discover by reading the code}
 
-I don't have AskUserQuestion. The project owner is monitoring .autonomous/comms.json.
+I don't have AskUserQuestion. The project owner is monitoring {comms_file}.
 
-To ask: `python3 -c "import json; json.dump({'status':'waiting','questions':[{'question':'...','header':'...','options':[{'label':'...'}],'multiSelect':False}],'rec':'A'}, open('.autonomous/comms.json','w'))"`
-To wait: `python3 -c "import json,time;\nwhile True:\n d=json.load(open('.autonomous/comms.json'))\n if d.get('status')=='answered':\n  for a in d.get('answers',[]):print(a)\n  break\n time.sleep(3)"`
+To ask: `python3 -c "import json; json.dump({'status':'waiting','questions':[{'question':'...','header':'...','options':[{'label':'...'}],'multiSelect':False}],'rec':'A'}, open('{comms_file}','w'))"`
+To wait: `python3 -c "import json,time;\nwhile True:\n d=json.load(open('{comms_file}'))\n if d.get('status')=='answered':\n  for a in d.get('answers',[]):print(a)\n  break\n time.sleep(3)"`
 
-When done: `python3 -c "import json; json.dump({'status':'done','summary':'...'}, open('.autonomous/comms.json','w'))"`
+When done: `python3 -c "import json; json.dump({'status':'done','summary':'...'}, open('{comms_file}','w'))"`
 
 If you discover an out-of-scope issue, log it:
   `bash "$SCRIPT_DIR/scripts/backlog.sh" add "$(pwd)" "Title" "Detail" worker`
 ```
+
+Where `{comms_file}` is:
+- `.autonomous/comms.json` for single-worker dispatch (default)
+- `.autonomous/comms-{worker-id}.json` when using per-worker isolation
 
 ## Boundaries
 

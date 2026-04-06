@@ -19,7 +19,8 @@ show_help() {
   echo "  summary             2-3 sentence summary of what was accomplished"
   echo "  iterations          Number of iterations used (default: 1)"
   echo "  direction_complete  true | false (default: true)"
-  echo "  sprint_num          Sprint number (optional; archives comms.json if provided)"
+  echo "  sprint_num          Sprint number (optional; archives comms.json and"
+  echo "                      per-worker comms-worker-*.json files if provided)"
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
@@ -59,6 +60,18 @@ print(json.dumps(summary, indent=2))
 if [ -n "$SPRINT_NUM" ] && [ -f "$PROJECT_DIR/.autonomous/comms.json" ]; then
   mkdir -p "$PROJECT_DIR/.autonomous/comms-archive"
   cp "$PROJECT_DIR/.autonomous/comms.json" "$PROJECT_DIR/.autonomous/comms-archive/sprint-${SPRINT_NUM}.json"
+fi
+
+# Archive per-worker comms files (comms-worker-*.json)
+if [ -n "$SPRINT_NUM" ]; then
+  for wf in "$PROJECT_DIR"/.autonomous/comms-worker-*.json; do
+    [ -f "$wf" ] || continue
+    mkdir -p "$PROJECT_DIR/.autonomous/comms-archive"
+    # Extract worker-id: comms-worker-{id}.json -> worker-{id}
+    BASENAME=$(basename "$wf" .json)
+    WID="${BASENAME#comms-}"
+    cp "$wf" "$PROJECT_DIR/.autonomous/comms-archive/sprint-${SPRINT_NUM}-${WID}.json"
+  done
 fi
 
 # Kill registered worker windows

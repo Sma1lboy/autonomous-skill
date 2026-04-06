@@ -5,7 +5,8 @@
 #        bash show-comms.sh <project_dir> --list
 #
 # Reads .autonomous/comms-archive/sprint-{N}.json and pretty-prints it.
-# --list shows all archived sprint numbers.
+# Also shows per-worker archives (sprint-{N}-worker-{id}.json).
+# --list shows all archived sprint numbers and worker files.
 
 set -euo pipefail
 
@@ -14,11 +15,13 @@ show_help() {
   echo "       bash show-comms.sh <project_dir> --list"
   echo ""
   echo "Display archived comms logs from .autonomous/comms-archive/."
+  echo "Supports both sprint-level archives (sprint-{N}.json) and"
+  echo "per-worker archives (sprint-{N}-worker-{id}.json)."
   echo ""
   echo "Arguments:"
   echo "  project_dir   Project directory"
   echo "  sprint_num    Sprint number to display"
-  echo "  --list        List all archived sprint numbers"
+  echo "  --list        List all archived sprint numbers and worker files"
   echo ""
   echo "Examples:"
   echo "  bash show-comms.sh /path/to/project 3"
@@ -43,8 +46,17 @@ if [ "$ACTION" = "--list" ]; then
   echo "Archived sprints:"
   for f in "$ARCHIVE_DIR"/sprint-*.json; do
     [ -f "$f" ] || continue
-    NUM=$(basename "$f" | sed 's/sprint-//;s/\.json//')
-    echo "  Sprint $NUM"
+    BASENAME=$(basename "$f" .json)
+    # Distinguish sprint-level vs per-worker archives
+    if echo "$BASENAME" | grep -qE '^sprint-[0-9]+-worker-'; then
+      REST="${BASENAME#sprint-}"
+      NUM="${REST%%-*}"
+      WID="${REST#*-}"
+      echo "  Sprint $NUM ($WID)"
+    else
+      NUM="${BASENAME#sprint-}"
+      echo "  Sprint $NUM"
+    fi
   done
   exit 0
 fi
