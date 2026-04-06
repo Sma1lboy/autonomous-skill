@@ -222,9 +222,10 @@ source = sys.argv[4]
 priority = int(sys.argv[5])
 dimension = sys.argv[6] if sys.argv[6] else None
 triaged = sys.argv[7] == 'true'
+max_title_length = int(sys.argv[8])
 
 # Sanitize title: strip control chars and newlines, truncate
-title = re.sub(r'[\x00-\x1f\x7f]', '', title)[:$MAX_TITLE_LENGTH]
+title = re.sub(r'[\x00-\x1f\x7f]', '', title)[:max_title_length]
 
 items = d.get('items', [])
 ts = int(time.time())
@@ -235,7 +236,7 @@ now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
 # Check open count and force-prune if needed
 open_items = [i for i in items if i.get('status') == 'open']
 pruned_ids = []
-max_open = int(sys.argv[8])
+max_open = int(sys.argv[9])
 while len(open_items) >= max_open:
     # Find lowest priority (highest number), then oldest
     candidates = sorted(open_items, key=lambda x: (-x.get('priority', 3), x.get('created_at', '')))
@@ -270,7 +271,7 @@ if pruned_ids:
     for pid in pruned_ids:
         print(f'WARNING: pruned {pid} to stay under {max_open} cap', file=sys.stderr)
 print(json.dumps(d))
-" "$state" "$title" "$description" "$source" "$priority" "${dimension:-}" "$triaged" "$MAX_OPEN")
+" "$state" "$title" "$description" "$source" "$priority" "${dimension:-}" "$triaged" "$MAX_TITLE_LENGTH" "$MAX_OPEN")
 
   # Extract the item ID from the updated state
   local item_id
