@@ -141,6 +141,9 @@ bash "$SCRIPT_DIR/scripts/backlog.sh" update "$(pwd)" "<item-id>" priority 2
   - BAD: A multi-paragraph spec listing every file, every CSS property, every layout decision
   The sprint master and worker have full tools — they can read code, browse references,
   and make design decisions. Your job is to point them in a direction, not prescribe the solution.
+  **Exception:** If the USER explicitly provided a detailed spec in their original input
+  (via args or during Discovery), pass it through as-is. The constraint above applies to
+  directions YOU generate when breaking a mission into sprints — not to user-authored content.
 - If the mission has more work than fits in one sprint, add deferred items to
   the backlog for later:
   ```bash
