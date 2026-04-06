@@ -43,10 +43,43 @@ bash "$SCRIPT_DIR/scripts/cleanup-workers.sh" "$PROJECT_DIR"
 
 # Parse summary or construct fallback
 if [ -f "$SUMMARY_FILE" ]; then
-  STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','unknown'))" "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
-  SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','No summary'))" "$SUMMARY_FILE" 2>/dev/null || echo "No summary")
-  COMMITS=$(python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])).get('commits',[])))" "$SUMMARY_FILE" 2>/dev/null || echo "[]")
-  DIR_COMPLETE=$(python3 -c "import json,sys; print(str(json.load(open(sys.argv[1])).get('direction_complete',False)).lower())" "$SUMMARY_FILE" 2>/dev/null || echo "false")
+  # Read all fields in a single python3 call to avoid inconsistent state from partial corruption
+  if PARSED=$(python3 -c "
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    print(d.get('status', 'unknown'))
+    print(json.dumps(d.get('commits', [])))
+    print(str(d.get('direction_complete', False)).lower())
+    # Summary last (may contain newlines in theory)
+    print(d.get('summary', 'No summary'))
+except Exception:
+    sys.exit(1)
+" "$SUMMARY_FILE" 2>/dev/null); then
+    STATUS=$(echo "$PARSED" | sed -n '1p')
+    COMMITS=$(echo "$PARSED" | sed -n '2p')
+    DIR_COMPLETE=$(echo "$PARSED" | sed -n '3p')
+    SUMMARY=$(echo "$PARSED" | sed -n '4p')
+  else
+    # JSON corrupt or python3 failed — fall through to git-based fallback
+    STATUS=""
+  fi
+  # If parsing failed (empty status), use the git-based fallback below
+  if [ -z "$STATUS" ]; then
+    STATUS="unknown"
+    LATEST=$(git log --oneline -1 2>/dev/null || echo "")
+    if [ -n "$LAST_COMMIT" ] && [ "$LATEST" != "$LAST_COMMIT" ]; then
+      SUMMARY="Sprint completed with new commits (corrupt summary file)."
+      COMMITS=$(git log --oneline -5 2>/dev/null | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))" 2>/dev/null || echo "[]")
+      STATUS="complete"
+    else
+      SUMMARY="Sprint completed with no new commits (corrupt summary file)."
+      COMMITS="[]"
+      STATUS="partial"
+    fi
+    DIR_COMPLETE="false"
+  fi
 else
   STATUS="unknown"
   LATEST=$(git log --oneline -1 2>/dev/null || echo "")
