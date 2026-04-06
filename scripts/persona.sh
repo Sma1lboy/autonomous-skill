@@ -166,7 +166,8 @@ RESULT=$(timeout 60 claude -p "$CONTEXT" --permission-mode auto --output-format 
 if [ -n "$RESULT" ]; then
   GENERATED=$(echo "$RESULT" | jq -r '.result // empty' 2>/dev/null || true)
   if [ -n "$GENERATED" ]; then
-    echo "$GENERATED" > "$OWNER_FILE"
+    echo "$GENERATED" > "${OWNER_FILE}.tmp.$$"
+    mv -f "${OWNER_FILE}.tmp.$$" "$OWNER_FILE"
     echo "Auto-generated OWNER.md. Review and edit: $OWNER_FILE" >&2
     echo "$OWNER_FILE"
     exit 0
