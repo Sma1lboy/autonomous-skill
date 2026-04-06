@@ -135,8 +135,9 @@ MOCK_DIR=$(new_mock_dir)
 write_mock_claude "$MOCK_DIR" 'echo "$*" > "$(dirname "$0")/args.txt"'
 
 PATH="$MOCK_DIR:$PATH" bash "$LOOP" "$T" "test" 2>/dev/null || true
-assert_eq "$([ -f "$T/OWNER.md" ] && echo 'yes' || echo 'no')" "yes" \
-  "persona.sh auto-generates OWNER.md"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+assert_eq "$([ -f "$REPO_ROOT/OWNER.md" ] && echo 'yes' || echo 'no')" "yes" \
+  "persona.sh auto-generates OWNER.md (global)"
 ARGS=$(cat "$MOCK_DIR/args.txt" 2>/dev/null || echo "")
 assert_contains "$ARGS" "append-system-prompt" "auto-generated OWNER.md appended to claude"
 

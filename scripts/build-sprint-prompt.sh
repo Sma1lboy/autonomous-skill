@@ -38,6 +38,7 @@ BACKLOG_TITLES=$(bash "$SCRIPT_DIR/scripts/backlog.sh" list "$PROJECT_DIR" open 
   printf '%s\n' "You are a sprint master. Follow the instructions below exactly."
   printf '\n'
   printf '%s\n' "SCRIPT_DIR: $SCRIPT_DIR"
+  printf '%s\n' "OWNER_FILE: $SCRIPT_DIR/OWNER.md"
   printf '%s\n' "PROJECT: $PROJECT_DIR"
   printf '%s\n' "SPRINT_NUMBER: $SPRINT_NUM"
   printf '%s\n' "SPRINT_DIRECTION: $SPRINT_DIRECTION"

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Tests for scripts/persona.sh
 # Uses tests/claude mock binary — no real API calls.
+#
+# OWNER.md is now GLOBAL (lives in skill root dir, not per-project).
+# Tests back up and restore the real OWNER.md to avoid side effects.
 
 set -euo pipefail
 
@@ -8,9 +11,33 @@ source "$(dirname "${BASH_SOURCE[0]}")/test_helpers.sh"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PERSONA_SH="$REPO_ROOT/scripts/persona.sh"
+GLOBAL_OWNER="$REPO_ROOT/OWNER.md"
 
 # Intercept 'claude' with mock before real binary
 export PATH="$REPO_ROOT/tests:$PATH"
+
+# Back up existing global OWNER.md (restore at end)
+OWNER_BACKUP=""
+if [ -f "$GLOBAL_OWNER" ]; then
+  OWNER_BACKUP=$(mktemp)
+  cp "$GLOBAL_OWNER" "$OWNER_BACKUP"
+fi
+
+# Extend existing cleanup trap from test_helpers.sh
+_orig_cleanup=$(trap -p EXIT | sed "s/trap -- '//;s/' EXIT//")
+restore_and_cleanup() {
+  if [ -n "$OWNER_BACKUP" ] && [ -f "$OWNER_BACKUP" ]; then
+    cp "$OWNER_BACKUP" "$GLOBAL_OWNER"
+    rm -f "$OWNER_BACKUP"
+  fi
+  eval "$_orig_cleanup"
+}
+trap restore_and_cleanup EXIT
+
+# Helper: remove global OWNER.md so tests start clean
+remove_global_owner() {
+  rm -f "$GLOBAL_OWNER"
+}
 
 # ── Tests ───────────────────────────────────────────────────────────────────
 echo ""
@@ -20,24 +47,30 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 # 1. OWNER.md already exists → return path, do not overwrite
 echo ""
-echo "1. OWNER.md already exists"
+echo "1. OWNER.md already exists (global)"
+remove_global_owner
+echo "# Existing Persona" > "$GLOBAL_OWNER"
 T=$(new_tmp)
-echo "# Existing Persona" > "$T/OWNER.md"
 OUT=$(bash "$PERSONA_SH" "$T" 2>/dev/null)
-assert_eq "$OUT" "$T/OWNER.md" "returns existing path"
-assert_file_contains "$T/OWNER.md" "Existing Persona" "does not overwrite existing content"
+# Output path may contain ../ — normalize both for comparison
+REAL_OUT=$(cd "$(dirname "$OUT")" && echo "$(pwd)/$(basename "$OUT")")
+REAL_EXPECT=$(cd "$(dirname "$GLOBAL_OWNER")" && echo "$(pwd)/$(basename "$GLOBAL_OWNER")")
+assert_eq "$REAL_OUT" "$REAL_EXPECT" "returns global OWNER.md path"
+assert_file_contains "$GLOBAL_OWNER" "Existing Persona" "does not overwrite existing content"
 
-# 2. No context (no git, no CLAUDE.md, no README) → copies template
+# 2. No context (no git, no CLAUDE.md, no README) → copies template to global
 echo ""
 echo "2. No context → copies template"
+remove_global_owner
 T=$(new_tmp)
 bash "$PERSONA_SH" "$T" >/dev/null 2>&1
-assert_file_exists "$T/OWNER.md" "OWNER.md created"
-assert_file_contains "$T/OWNER.md" "Priorities" "template content present"
+assert_file_exists "$GLOBAL_OWNER" "OWNER.md created in skill dir"
+assert_file_contains "$GLOBAL_OWNER" "Priorities" "template content present"
 
-# 3. Has CLAUDE.md → invokes mock claude, writes generated persona
+# 3. Has CLAUDE.md → invokes mock claude, writes generated persona to global
 echo ""
 echo "3. Has CLAUDE.md → claude generates persona"
+remove_global_owner
 T=$(new_tmp)
 echo "# Project instructions" > "$T/CLAUDE.md"
 if command -v jq >/dev/null 2>&1; then
@@ -56,15 +89,16 @@ Breaking tests
 Test coverage"
   bash "$PERSONA_SH" "$T" >/dev/null 2>&1
   unset MOCK_CLAUDE_OUTPUT
-  assert_file_exists "$T/OWNER.md" "OWNER.md created"
-  assert_file_contains "$T/OWNER.md" "Ship fast" "generated content written"
+  assert_file_exists "$GLOBAL_OWNER" "OWNER.md created in skill dir"
+  assert_file_contains "$GLOBAL_OWNER" "Ship fast" "generated content written"
 else
   echo "  skip (jq not installed)"
 fi
 
-# 4. Has git history → invokes mock claude, writes generated persona
+# 4. Has git history → invokes mock claude, writes generated persona to global
 echo ""
 echo "4. Has git history → claude generates persona"
+remove_global_owner
 T=$(new_tmp)
 git -C "$T" init -q
 git -C "$T" -c user.email="t@t.com" -c user.name="T" commit -m "init" --allow-empty -q
@@ -84,15 +118,16 @@ Big rewrites
 Refactor auth"
   bash "$PERSONA_SH" "$T" >/dev/null 2>&1
   unset MOCK_CLAUDE_OUTPUT
-  assert_file_exists "$T/OWNER.md" "OWNER.md created"
-  assert_file_contains "$T/OWNER.md" "Code quality" "git-history-based persona written"
+  assert_file_exists "$GLOBAL_OWNER" "OWNER.md created in skill dir"
+  assert_file_contains "$GLOBAL_OWNER" "Code quality" "git-history-based persona written"
 else
   echo "  skip (jq not installed)"
 fi
 
-# 5. Has README.md → invokes mock claude, writes generated persona
+# 5. Has README.md → invokes mock claude, writes generated persona to global
 echo ""
 echo "5. Has README.md → claude generates persona"
+remove_global_owner
 T=$(new_tmp)
 echo "# My Project" > "$T/README.md"
 if command -v jq >/dev/null 2>&1; then
@@ -111,43 +146,44 @@ Over-engineering
 Onboarding flow"
   bash "$PERSONA_SH" "$T" >/dev/null 2>&1
   unset MOCK_CLAUDE_OUTPUT
-  assert_file_exists "$T/OWNER.md" "OWNER.md created"
-  assert_file_contains "$T/OWNER.md" "User experience" "README-based persona written"
+  assert_file_exists "$GLOBAL_OWNER" "OWNER.md created in skill dir"
+  assert_file_contains "$GLOBAL_OWNER" "User experience" "README-based persona written"
 else
   echo "  skip (jq not installed)"
 fi
 
 # 6. Claude fails (MOCK_CLAUDE_EXIT=1) → falls back to template
-# MOCK_CLAUDE_OUTPUT is set to a sentinel so the not_contains assertion
-# actually tests something: if persona.sh mistakenly wrote generated
-# content despite failure, this string would appear in OWNER.md.
 echo ""
 echo "6. Claude fails → falls back to template"
+remove_global_owner
 T=$(new_tmp)
 echo "# CLAUDE.md" > "$T/CLAUDE.md"
 export MOCK_CLAUDE_OUTPUT="FAIL_TEST_SENTINEL_SHOULD_NOT_APPEAR"
 export MOCK_CLAUDE_EXIT=1
 bash "$PERSONA_SH" "$T" >/dev/null 2>&1
 unset MOCK_CLAUDE_EXIT MOCK_CLAUDE_OUTPUT
-assert_file_exists "$T/OWNER.md" "OWNER.md still created"
-assert_file_contains "$T/OWNER.md" "Priorities" "template used as fallback"
-assert_file_not_contains "$T/OWNER.md" "FAIL_TEST_SENTINEL_SHOULD_NOT_APPEAR" "generated content not written on failure"
+assert_file_exists "$GLOBAL_OWNER" "OWNER.md still created"
+assert_file_contains "$GLOBAL_OWNER" "Priorities" "template used as fallback"
+assert_file_not_contains "$GLOBAL_OWNER" "FAIL_TEST_SENTINEL_SHOULD_NOT_APPEAR" "generated content not written on failure"
 
 # 7. Idempotent — second call does not regenerate
 echo ""
 echo "7. Idempotent — second call returns same file"
+remove_global_owner
+echo "# Fixed Content" > "$GLOBAL_OWNER"
 T=$(new_tmp)
-echo "# Fixed Content" > "$T/OWNER.md"
 bash "$PERSONA_SH" "$T" >/dev/null 2>&1
 bash "$PERSONA_SH" "$T" >/dev/null 2>&1
-assert_file_contains "$T/OWNER.md" "Fixed Content" "content unchanged after second call"
+assert_file_contains "$GLOBAL_OWNER" "Fixed Content" "content unchanged after second call"
 
-# 8. Default PROJECT_DIR is current directory
+# 8. OWNER.md is NOT created in project dir
 echo ""
-echo "8. Default PROJECT_DIR is '.'"
+echo "8. OWNER.md is global, not per-project"
+remove_global_owner
 T=$(new_tmp)
-(cd "$T" && bash "$PERSONA_SH" >/dev/null 2>&1) || true
-assert_file_exists "$T/OWNER.md" "OWNER.md created in cwd"
+bash "$PERSONA_SH" "$T" >/dev/null 2>&1
+assert_file_exists "$GLOBAL_OWNER" "OWNER.md created in skill dir"
+assert_file_not_exists "$T/OWNER.md" "no OWNER.md in project dir"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. --help flag

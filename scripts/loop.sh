@@ -64,7 +64,7 @@ command -v timeout &>/dev/null || die "timeout command not found in PATH
 bash "$SCRIPT_DIR/persona.sh" "$PROJECT_DIR" >/dev/null 2>&1
 
 OWNER=""
-[ -f "$PROJECT_DIR/OWNER.md" ] && OWNER=$(cat "$PROJECT_DIR/OWNER.md")
+[ -f "$SCRIPT_DIR/../OWNER.md" ] && OWNER=$(cat "$SCRIPT_DIR/../OWNER.md")
 
 # Build the master prompt — just point CC at the SKILL.md identity
 PROMPT="You are the autonomous master mind for this project.

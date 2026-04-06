@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# persona.sh — Generate OWNER.md from git history and project docs if it doesn't exist
+# persona.sh — Generate global OWNER.md if it doesn't exist
+# OWNER.md lives in the skill directory (global, not per-project).
+# Owner identity, preferences, and decision style don't change per repo.
 set -euo pipefail
 
 usage() {
   cat << 'EOF'
 Usage: persona.sh [project-dir]
 
-Generate OWNER.md from git history, CLAUDE.md, and README.md.
+Generate OWNER.md in the autonomous-skill directory (global persona).
 If OWNER.md already exists, prints its path and exits.
 
-The generated persona captures the project owner's coding style,
-priorities, and conventions — used by autonomous-skill workers
-to make decisions aligned with the owner's preferences.
+The generated persona captures the owner's coding style, priorities,
+and conventions — used by autonomous-skill workers to make decisions
+aligned with the owner's preferences.
 
 Arguments:
-  project-dir   Path to the project (default: current directory)
+  project-dir   Optional project path used as context for initial generation.
+                Not where OWNER.md is stored — it always lives in the skill dir.
 
 Falls back to a template if no project context is available or
 if claude CLI is not installed.
@@ -30,8 +33,8 @@ esac
 command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
 
 PROJECT_DIR="${1:-.}"
-OWNER_FILE="$PROJECT_DIR/OWNER.md"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OWNER_FILE="$SCRIPT_DIR/../OWNER.md"
 TEMPLATE="$SCRIPT_DIR/../OWNER.md.template"
 
 # Write the fallback template to OWNER_FILE (used when no context or claude fails)
