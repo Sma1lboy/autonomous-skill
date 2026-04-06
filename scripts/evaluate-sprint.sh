@@ -37,6 +37,14 @@ if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
   tmux kill-window -t "sprint-$SPRINT_NUM" 2>/dev/null || true
 fi
 
+# Kill registered worker windows
+if [ -f "$PROJECT_DIR/.autonomous/worker-windows.txt" ]; then
+  while IFS= read -r win; do
+    tmux kill-window -t "$win" 2>/dev/null || true
+  done < "$PROJECT_DIR/.autonomous/worker-windows.txt"
+  rm -f "$PROJECT_DIR/.autonomous/worker-windows.txt"
+fi
+
 # Parse summary or construct fallback
 if [ -f "$SUMMARY_FILE" ]; then
   STATUS=$(python3 -c "import json; print(json.load(open('$SUMMARY_FILE')).get('status','unknown'))" 2>/dev/null || echo "unknown")
