@@ -20,7 +20,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "1. State initialization"
 T=$(new_tmp)
-SESSION_ID=$(bash "$CONDUCTOR" init "$T" "build feature X" 10)
+SESSION_ID=$(bash "$CONDUCTOR" init "$T" "build feature X" 5)
 assert_contains "$SESSION_ID" "conductor-" "init returns session ID"
 assert_file_exists "$T/.autonomous/conductor-state.json" "state file created"
 
@@ -30,8 +30,8 @@ import json
 d = json.load(open('$T/.autonomous/conductor-state.json'))
 assert d['mission'] == 'build feature X'
 assert d['phase'] == 'directed'
-assert d['max_sprints'] == 10
-assert d['max_directed_sprints'] == 7
+assert d['max_sprints'] == 5
+assert d['max_directed_sprints'] == 3
 assert d['sprints'] == []
 assert d['consecutive_complete'] == 0
 assert d['consecutive_zero_commits'] == 0
@@ -367,7 +367,7 @@ assert_eq "$PHASE" "directed" "phase returns directed initially"
 echo ""
 echo "19. Sprint-end default commits"
 T=$(new_tmp)
-bash "$CONDUCTOR" init "$T" "defaults" 10 > /dev/null
+bash "$CONDUCTOR" init "$T" "defaults" 5 > /dev/null
 bash "$CONDUCTOR" sprint-start "$T" "task" > /dev/null
 PHASE=$(bash "$CONDUCTOR" sprint-end "$T" "blocked" "Couldn't proceed")
 assert_eq "$PHASE" "directed" "blocked sprint keeps directed phase"

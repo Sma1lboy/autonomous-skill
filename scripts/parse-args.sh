@@ -16,7 +16,7 @@ show_help() {
   echo "  '5'              → _MAX_SPRINTS=5, _DIRECTION=''"
   echo "  '5 build REST'   → _MAX_SPRINTS=5, _DIRECTION='build REST'"
   echo "  'unlimited'      → _MAX_SPRINTS=unlimited, _DIRECTION=''"
-  echo "  'fix the bug'    → _MAX_SPRINTS=10, _DIRECTION='fix the bug'"
+  echo "  'fix the bug'    → _MAX_SPRINTS=5, _DIRECTION='fix the bug'"
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
@@ -26,7 +26,7 @@ fi
 
 ARGS="${1:-}"
 _DIRECTION=""
-_MAX_SPRINTS="10"
+_MAX_SPRINTS="5"
 
 if [ -n "$ARGS" ]; then
   if echo "$ARGS" | grep -qi 'unlimited'; then

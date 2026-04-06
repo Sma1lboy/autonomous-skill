@@ -13,7 +13,7 @@ State management for the autonomous-skill conductor. Manages
 
 Commands:
   init <project-dir> <mission> [max-sprints]
-      Initialize a new conductor session (default max-sprints: 10)
+      Initialize a new conductor session (default max-sprints: 5)
 
   read <project-dir>
       Read current conductor state as JSON
@@ -176,7 +176,7 @@ release_lock() {
 
 cmd_init() {
   local mission="${3:-}"
-  local max_sprints="${4:-10}"
+  local max_sprints="${4:-5}"
   [ -z "$mission" ] && die "Usage: conductor-state.sh init <project-dir> <mission> [max-sprints]"
   [[ "$max_sprints" =~ ^[0-9]+$ ]] || die "max-sprints must be a positive integer, got: $max_sprints"
   [ "$max_sprints" -gt 0 ] || die "max-sprints must be > 0, got: $max_sprints"
