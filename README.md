@@ -28,16 +28,23 @@ Drop it into any git repo, run `/autonomous-skill`, go to sleep.
 
 ---
 
-## Quickstart
+## Install — 30 seconds
+
+Requirements: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Git
+
+Open Claude Code and paste this. Claude does the rest.
+
+```
+Install autonomous-skill: run git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill then add an "autonomous-skill" section to CLAUDE.md that says this is a self-driving project agent — run /autonomous-skill to start an autonomous session that creates an auto/ branch and continuously finds and fixes issues. Usage: /autonomous-skill [sprint_count] [direction]. Examples: /autonomous-skill (explore mode, 10 sprints), /autonomous-skill 5 build REST API, /autonomous-skill unlimited. List the helper skills: /test-worker, /clean-sandbox, /capture-worker, /diff-sessions. Mention that all changes happen on auto/ branches (never main), with --dangerously-skip-permissions and 15-minute timeout per sprint. Then ask the user if they want to try it now on the current project.
+```
+
+Or install manually:
 
 ```bash
 # 1. Clone
-git clone https://github.com/sma1lboy/autonomous-skill.git
+git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill
 
-# 2. Symlink into Claude Code skills
-ln -s "$(pwd)/autonomous-skill" ~/.claude/skills/autonomous-skill
-
-# 3. In any git repo, open Claude Code and run:
+# 2. In any git repo, open Claude Code and run:
 /autonomous-skill
 ```
 
@@ -168,23 +175,35 @@ AUTONOMOUS_DIRECTION="fix auth bugs" bash scripts/loop.sh /path/to/project
 ```
 autonomous-skill/
 ├── SKILL.md                          # Conductor: multi-sprint orchestrator
-├── SPRINT.md                         # Sprint master: per-sprint execution
+├── SPRINT.md                         # Sprint master: per-sprint execution (inlined into prompt)
 ├── CLAUDE.md                         # Project instructions for Claude
 ├── OWNER.md.template                 # Persona template for manual config
 ├── scripts/
+│   ├── startup.sh                    # SCRIPT_DIR resolution + project context (shared)
+│   ├── parse-args.sh                 # Parse ARGS → _MAX_SPRINTS + _DIRECTION
+│   ├── session-init.sh               # Create session branch, init state + backlog
+│   ├── build-sprint-prompt.sh        # Inline SPRINT.md + params → sprint-prompt.md
+│   ├── dispatch.sh                   # tmux/headless session dispatch
+│   ├── monitor-sprint.sh             # Poll for sprint-summary.json
+│   ├── monitor-worker.sh             # Poll comms.json + tmux/process liveness
+│   ├── evaluate-sprint.sh            # Read summary JSON, update conductor state
+│   ├── merge-sprint.sh               # Merge or discard sprint branch
+│   ├── write-summary.sh              # Generate sprint-summary.json
 │   ├── conductor-state.sh            # State management (atomic writes, PID lock)
 │   ├── explore-scan.sh               # 8-dimension project scanner
+│   ├── backlog.sh                    # Cross-session persistent backlog
 │   ├── persona.sh                    # OWNER.md auto-generation
 │   ├── loop.sh                       # Standalone launcher (outside CC)
 │   ├── master-poll.sh                # Manual master polling for comms.json
 │   └── master-watch.sh               # Dual-channel monitor (comms + JSONL)
 ├── tests/
-│   ├── test_helpers.sh               # Shared test framework (assertions, temp dirs)
-│   ├── test_conductor.sh             # 79 tests: state, phase transitions, exploration
-│   ├── test_comms.sh                 # 26 tests: comms.json protocol
-│   ├── test_persona.sh               # 15 tests: OWNER.md generation
-│   ├── test_explore_scan.sh          # 39 tests: dimension scoring heuristics
-│   ├── test_loop.sh                  # 12 tests: standalone launcher
+│   ├── test_helpers.sh               # Shared test framework
+│   ├── test_conductor.sh             # 99 tests: state, phase transitions, exploration
+│   ├── test_comms.sh                 # 34 tests: comms.json protocol
+│   ├── test_persona.sh               # 20 tests: OWNER.md generation
+│   ├── test_explore_scan.sh          # 45 tests: dimension scoring heuristics
+│   ├── test_loop.sh                  # 20 tests: standalone launcher
+│   ├── test_backlog.sh               # 76 tests: CRUD, progressive disclosure
 │   └── claude                        # Mock CC binary for testing
 ├── .claude/skills/
 │   ├── test-worker/SKILL.md          # Spawns worker + auto-answering master
@@ -221,14 +240,15 @@ autonomous-skill/
 
 ## Testing
 
-171 tests across 5 suites, all pure bash:
+294 tests across 6 suites, all pure bash:
 
 ```bash
-bash tests/test_conductor.sh    # 79 tests
-bash tests/test_comms.sh        # 26 tests
-bash tests/test_persona.sh      # 15 tests
-bash tests/test_explore_scan.sh # 39 tests
-bash tests/test_loop.sh         # 12 tests
+bash tests/test_conductor.sh    # 99 tests
+bash tests/test_comms.sh        # 34 tests
+bash tests/test_persona.sh      # 20 tests
+bash tests/test_explore_scan.sh # 45 tests
+bash tests/test_loop.sh         # 20 tests
+bash tests/test_backlog.sh      # 76 tests
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
 
