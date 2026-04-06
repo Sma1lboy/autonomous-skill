@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash dispatch.sh <project_dir> <prompt_file> <window_name> [worker-id]"
   echo ""
   echo "Launch a claude -p session from a prompt file."
@@ -32,7 +32,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

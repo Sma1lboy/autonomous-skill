@@ -7,7 +7,7 @@
 #   _MAX_SPRINTS=<number|unlimited>
 #   _DIRECTION=<string>
 
-show_help() {
+usage() {
   echo "Usage: eval \"\$(bash parse-args.sh \"\$ARGS\")\""
   echo ""
   echo "Parse autonomous-skill arguments into _MAX_SPRINTS and _DIRECTION."
@@ -20,7 +20,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 
@@ -37,7 +37,8 @@ if [ -n "$ARGS" ]; then
     _NUM=$(echo "$ARGS" | grep -oE '^[0-9]+' | head -1)
     if [ -n "$_NUM" ]; then
       _MAX_SPRINTS="$_NUM"
-      _DIRECTION=$(echo "$ARGS" | sed "s/^${_NUM}[[:space:]]*//" )
+      _DIRECTION="${ARGS#"${_NUM}"}"
+      _DIRECTION="${_DIRECTION#"${_DIRECTION%%[![:space:]]*}"}"
     else
       _DIRECTION="$ARGS"
     fi

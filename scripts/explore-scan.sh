@@ -36,6 +36,10 @@ case "${1:-}" in
   -h|--help|help) usage ;;
 esac
 
+ARCH_LINE_THRESHOLD=300
+SECONDS_PER_DAY=86400
+STALENESS_DAYS=180
+
 command -v python3 &>/dev/null || { echo "ERROR: python3 required but not found" >&2; exit 1; }
 
 PROJECT="${1:-.}"
@@ -167,8 +171,8 @@ import subprocess, datetime, sys
 r = subprocess.run(['git','log','-1','--format=%ct','--','README.md'],
                    capture_output=True, text=True, cwd=sys.argv[1])
 ts = int(r.stdout.strip()) if r.stdout.strip() else 0
-days = (datetime.datetime.now().timestamp() - ts) / 86400 if ts else 999
-print(min(3, round(3 * max(0, 1 - days / 180))))
+days = (datetime.datetime.now().timestamp() - ts) / $SECONDS_PER_DAY if ts else 999
+print(min(3, round(3 * max(0, 1 - days / $STALENESS_DAYS))))
 " "$PROJECT" 2>/dev/null || echo "0")
   _ds=$((_ds + _rf))
 fi
@@ -180,7 +184,7 @@ score "documentation" "$(clamp "$_ds")"
 _big=$(find "$PROJECT" -type f \( "${SRC_EXTS[@]}" \) \
   "${EXCLUDE_PATHS[@]}" \
   -exec wc -l {} + 2>/dev/null \
-  | awk '$1 > 300 && !/total$/' \
+  | awk -v threshold="$ARCH_LINE_THRESHOLD" '$1 > threshold && !/total$/' \
   | wc -l | tr -d ' ')
 score "architecture" "$(clamp "10 - $_big * 2")"
 

@@ -7,7 +7,7 @@
 # When eval'd, exports SCRIPT_DIR. When run directly, prints project context.
 # Shared by conductor (SKILL.md) and sprint master (SPRINT.md).
 
-show_help() {
+usage() {
   echo "Usage: bash startup.sh [project_dir]"
   echo ""
   echo "Resolve SCRIPT_DIR and display project context (OWNER.md, git log)."
@@ -19,7 +19,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

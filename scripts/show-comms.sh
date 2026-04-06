@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash show-comms.sh <project_dir> <sprint_num>"
   echo "       bash show-comms.sh <project_dir> --list"
   echo ""
@@ -29,7 +29,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 

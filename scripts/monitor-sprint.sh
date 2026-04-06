@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-show_help() {
+usage() {
   echo "Usage: bash monitor-sprint.sh <project_dir> <sprint_num>"
   echo ""
   echo "Poll for sprint completion. Blocks until sprint-summary.json appears"
@@ -16,7 +16,7 @@ show_help() {
 }
 
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "help" ]; then
-  show_help
+  usage
   exit 0
 fi
 
@@ -26,21 +26,7 @@ SPRINT_NUM="${2:?Usage: monitor-sprint.sh <project_dir> <sprint_num>}"
 # Max poll iterations before timeout (default ~225 = ~30 min at 8s intervals)
 MAX_POLLS="${MONITOR_MAX_POLLS:-225}"
 
-# Helper: read comms JSON status safely.
-# Outputs one of: idle, waiting, done, answered, CORRUPT, or empty string
-_read_comms_status() {
-  local file="$1"
-  [ -f "$file" ] || { echo ""; return 0; }
-  local result
-  result=$(python3 -c "import json,sys
-try:
-    d = json.load(open(sys.argv[1]))
-    print(d.get('status',''))
-except (json.JSONDecodeError, ValueError, KeyError):
-    print('CORRUPT')
-" "$file" 2>/dev/null) || { echo "CORRUPT"; return 0; }
-  echo "$result"
-}
+source "$(dirname "${BASH_SOURCE[0]}")/comms-lib.sh"
 
 SUMMARY_FILE="$PROJECT_DIR/.autonomous/sprint-$SPRINT_NUM-summary.json"
 GENERIC_FILE="$PROJECT_DIR/.autonomous/sprint-summary.json"

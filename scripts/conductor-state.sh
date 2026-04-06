@@ -104,7 +104,7 @@ trap cleanup EXIT
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-die() { echo "ERROR: $*" >&2; exit 1; }
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 # Atomic write: write to tmp, verify, then mv
 atomic_write() {
