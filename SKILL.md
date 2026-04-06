@@ -88,6 +88,9 @@ bash "$SCRIPT_DIR/scripts/conductor-state.sh" init "$(pwd)" "$_DIRECTION" "$_MAX
 bash "$SCRIPT_DIR/scripts/backlog.sh" init "$(pwd)"
 # Prune stale items at session start
 bash "$SCRIPT_DIR/scripts/backlog.sh" prune "$(pwd)" 30 2>/dev/null || true
+
+# Initialize learnings (idempotent — preserves existing cross-session learnings)
+bash "$SCRIPT_DIR/scripts/learnings.sh" init "$(pwd)"
 ```
 
 ## How You Work — The Conductor Loop
@@ -104,6 +107,8 @@ bash "$SCRIPT_DIR/scripts/conductor-state.sh" read "$(pwd)"
 # Read backlog for planning context (full descriptions for conductor)
 BACKLOG_FULL=$(bash "$SCRIPT_DIR/scripts/backlog.sh" list "$(pwd)" open 2>/dev/null || echo "[]")
 BACKLOG_STATS=$(bash "$SCRIPT_DIR/scripts/backlog.sh" stats "$(pwd)" 2>/dev/null || echo "")
+# Read learnings summary for sprint context
+LEARNINGS=$(bash "$SCRIPT_DIR/scripts/learnings.sh" summary "$(pwd)" 2>/dev/null || echo "")
 ```
 
 **Between sprints — Backlog triage:** If new worker-sourced items appeared
@@ -187,6 +192,7 @@ SPRINT_NUMBER: $SPRINT_NUM
 SPRINT_DIRECTION: $SPRINT_DIRECTION
 PREVIOUS_SUMMARY: $PREV_SUMMARY
 BACKLOG_TITLES: $BACKLOG_TITLES
+LEARNINGS: $LEARNINGS
 
 Begin immediately. Dispatch your worker and drive the sprint to completion.
 When done, write .autonomous/sprint-summary.json with the results.

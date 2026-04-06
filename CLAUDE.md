@@ -28,6 +28,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/conductor-state.sh` — Conductor state management (atomic writes, PID lock, phase transitions)
 - `scripts/explore-scan.sh` — Project scanner: scores 8 exploration dimensions via bash heuristics
 - `scripts/backlog.sh` — Cross-session persistent backlog (progressive disclosure, mkdir locking, max 50 items)
+- `scripts/learnings.sh` — Cross-session persistent learnings (type-tagged, confidence-scored, max 100 items)
 - `scripts/persona.sh` — OWNER.md auto-generation from git history + project docs
 - `scripts/loop.sh` — Standalone launcher (outside CC's skill system)
 - `scripts/master-poll.sh` — Manual master polling for comms.json
@@ -89,6 +90,17 @@ Cross-session persistent work queue in `.autonomous/backlog.json`:
 - `mkdir`-based atomic locking for concurrent writes (workers + conductor)
 - Management: `scripts/backlog.sh` (init, add, list, read, pick, update, stats, prune)
 
+## Learnings
+
+Cross-session persistent sprint learning mechanism in `.autonomous/learnings.json`:
+- Items have `type` (success|failure|quirk|pattern), `content`, `confidence` (1-10), `tags`
+- Sources: conductor, worker, sprint-master
+- Summary format injected into sprint prompts (top 20 by confidence, type symbols: ✓✗?⟳)
+- Workers log learnings fire-and-forget; conductor provides them to future sprints
+- Max 100 active items; overflow archives lowest confidence
+- `archived` field for soft delete via prune (below confidence threshold)
+- Management: `scripts/learnings.sh` (init, add, list, search, summary, update, stats, prune)
+
 ## Safety
 
 - All changes on `auto/` branches (never main)
@@ -108,6 +120,7 @@ bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
 bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
 bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
 bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
+bash tests/test_learnings.sh    # 94 tests: CRUD, types, confidence, tags, search, summary, prune, overflow, concurrency
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
 

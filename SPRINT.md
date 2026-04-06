@@ -14,6 +14,7 @@ The Conductor provides these via the prompt:
 - **PREVIOUS_SUMMARY**: What happened in the last sprint (if any)
 - **PROJECT_PATH**: The project directory
 - **BACKLOG_TITLES**: Title-only list of pending backlog items (for awareness, not action)
+- **LEARNINGS**: Compact summary of cross-session learnings (apply when relevant)
 
 ## Startup
 
@@ -60,6 +61,9 @@ You have a specific direction for this sprint. Focus on it.
    These are deferred items the conductor is tracking. Do NOT pull from them —
    the conductor decides what gets prioritized. But knowing they exist helps you
    avoid duplicating planned work and scope your sprint appropriately.
+
+   If LEARNINGS is non-empty, review the learnings for patterns relevant to this
+   sprint. Apply success patterns, avoid known failure patterns, and respect quirks.
 
 2. **Direct** — Spawn a worker (independent session, full tools).
 
@@ -221,6 +225,9 @@ Tips from my mentor:
 - If you discover an issue OUT OF SCOPE for this sprint, log it to the backlog (fire-and-forget):
   `bash "$SCRIPT_DIR/scripts/backlog.sh" add "$(pwd)" "Title of issue" "Detail about what you found" worker`
   Do NOT fix out-of-scope issues. Stay focused on the sprint direction.
+- If you learn something useful during this sprint, log it for future sprints (fire-and-forget):
+  `bash "$SCRIPT_DIR/scripts/learnings.sh" add "$(pwd)" "type" "what you learned" confidence "tags" worker sprint_num`
+  Types: success (what worked), failure (what didn't), quirk (unexpected behavior), pattern (recurring theme).
 ```
 
 ## Boundaries

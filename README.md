@@ -72,6 +72,8 @@ Each layer runs in its own Claude session — fresh context per sprint, no bleed
 
 **Backlog** — A persistent work queue (`.autonomous/backlog.json`) that survives across sessions. Workers log out-of-scope discoveries, the conductor decomposes large missions into deferred items. When exploration runs dry, idle sprints pick from the backlog. Progressive disclosure: sprint masters only see one-line titles, the conductor sees full descriptions.
 
+**Learnings** — A persistent knowledge base (`.autonomous/learnings.json`) that accumulates across sessions. Workers log what worked (success), what didn't (failure), unexpected behaviors (quirk), and recurring themes (pattern). Each learning has a confidence score (1-10) and tags. The conductor injects the top 20 learnings into each sprint prompt so future sprints benefit from past discoveries.
+
 ---
 
 ## How It Works
@@ -85,8 +87,9 @@ Each layer runs in its own Claude session — fresh context per sprint, no bleed
    - **Exploration phase**: scans the project across 8 dimensions, picks the weakest, generates improvement sprints
 5. **Sprint execution** — Each sprint master gets a fresh `claude -p` session, dispatches a worker, answers questions via `comms.json`, and writes `sprint-summary.json` when done.
 6. **Merge/discard** — Successful sprints merge back to the session branch. Failed sprints are discarded.
-7. **Backlog pickup** — When exploration dimensions are all solid, the conductor checks the backlog for deferred work items before stopping.
-8. **Session ends** when all sprints are used up, the project feels solid, and the backlog is empty.
+7. **Learnings injection** — Each sprint prompt includes a summary of cross-session learnings (top 20 by confidence) so workers benefit from past discoveries.
+8. **Backlog pickup** — When exploration dimensions are all solid, the conductor checks the backlog for deferred work items before stopping.
+9. **Session ends** when all sprints are used up, the project feels solid, and the backlog is empty.
 
 ### Exploration Dimensions
 
@@ -174,6 +177,7 @@ autonomous-skill/
 ├── scripts/
 │   ├── conductor-state.sh            # State management (atomic writes, PID lock)
 │   ├── explore-scan.sh               # 8-dimension project scanner
+│   ├── learnings.sh                  # Cross-session persistent sprint learnings
 │   ├── persona.sh                    # OWNER.md auto-generation
 │   ├── loop.sh                       # Standalone launcher (outside CC)
 │   ├── master-poll.sh                # Manual master polling for comms.json
@@ -185,6 +189,7 @@ autonomous-skill/
 │   ├── test_persona.sh               # 15 tests: OWNER.md generation
 │   ├── test_explore_scan.sh          # 39 tests: dimension scoring heuristics
 │   ├── test_loop.sh                  # 12 tests: standalone launcher
+│   ├── test_learnings.sh             # 94 tests: learnings CRUD, search, overflow
 │   └── claude                        # Mock CC binary for testing
 ├── .claude/skills/
 │   ├── test-worker/SKILL.md          # Spawns worker + auto-answering master
@@ -198,6 +203,7 @@ autonomous-skill/
 **Generated at runtime** (gitignored):
 - `OWNER.md` — your persona, auto-generated from git + docs
 - `.autonomous/conductor-state.json` — multi-sprint state machine
+- `.autonomous/learnings.json` — cross-session sprint learnings
 - `.autonomous/comms.json` — worker↔master IPC
 - `.autonomous/sprint-summary.json` — per-sprint results
 
@@ -221,14 +227,16 @@ autonomous-skill/
 
 ## Testing
 
-171 tests across 5 suites, all pure bash:
+376 tests across 7 suites, all pure bash:
 
 ```bash
-bash tests/test_conductor.sh    # 79 tests
-bash tests/test_comms.sh        # 26 tests
-bash tests/test_persona.sh      # 15 tests
-bash tests/test_explore_scan.sh # 39 tests
-bash tests/test_loop.sh         # 12 tests
+bash tests/test_conductor.sh    # 87 tests
+bash tests/test_comms.sh        # 34 tests
+bash tests/test_persona.sh      # 20 tests
+bash tests/test_explore_scan.sh # 45 tests
+bash tests/test_loop.sh         # 20 tests
+bash tests/test_backlog.sh      # 76 tests
+bash tests/test_learnings.sh    # 94 tests
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
 
