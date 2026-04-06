@@ -48,30 +48,37 @@ fi
 
 # Create per-worker comms file if worker-id provided
 if [ -n "$WORKER_ID" ]; then
-  mkdir -p "$PROJECT_DIR/.autonomous"
+  mkdir -p "$PROJECT_DIR/.autonomous" && chmod 700 "$PROJECT_DIR/.autonomous"
   echo '{"status":"idle"}' > "$PROJECT_DIR/.autonomous/comms-${WORKER_ID}.json"
 fi
 
+# Sanitize window name: strip anything not alphanumeric, hyphen, or underscore
+SAFE_WINDOW_NAME=$(printf '%s' "$WINDOW_NAME" | tr -cd 'a-zA-Z0-9_-')
+[ -z "$SAFE_WINDOW_NAME" ] && SAFE_WINDOW_NAME="worker"
+
 # Create wrapper script — tmux cannot use claude -p or stdin redirect reliably
-WRAPPER="$PROJECT_DIR/.autonomous/run-${WINDOW_NAME}.sh"
-cat > "$WRAPPER" << RUNEOF
-#!/bin/bash
-cd "$PROJECT_DIR"
-PROMPT=\$(cat "$PROMPT_FILE")
-exec claude --dangerously-skip-permissions "\$PROMPT"
-RUNEOF
+# Use printf %q for safe shell-escaping of paths
+WRAPPER="$PROJECT_DIR/.autonomous/run-${SAFE_WINDOW_NAME}.sh"
+{
+  echo '#!/bin/bash'
+  printf 'cd %q\n' "$PROJECT_DIR"
+  # shellcheck disable=SC2016
+  printf 'PROMPT=$(cat %q)\n' "$PROMPT_FILE"
+  # shellcheck disable=SC2016
+  echo 'exec claude --dangerously-skip-permissions "$PROMPT"'
+} > "$WRAPPER"
 chmod +x "$WRAPPER"
 
 # Dispatch in tmux (visible to user) or headless background
 if command -v tmux &>/dev/null && tmux info &>/dev/null 2>&1; then
-  tmux new-window -n "$WINDOW_NAME" "bash $WRAPPER"
-  echo "$WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
+  tmux new-window -n "$SAFE_WINDOW_NAME" "bash $WRAPPER"
+  echo "$SAFE_WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
   echo "DISPATCH_MODE=tmux"
-  echo "Launched in tmux window '$WINDOW_NAME'"
+  echo "Launched in tmux window '$SAFE_WINDOW_NAME'"
 else
-  bash "$WRAPPER" > "$PROJECT_DIR/.autonomous/${WINDOW_NAME}-output.log" 2>&1 &
+  bash "$WRAPPER" > "$PROJECT_DIR/.autonomous/${SAFE_WINDOW_NAME}-output.log" 2>&1 &
   DISPATCH_PID=$!
-  echo "$WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
+  echo "$SAFE_WINDOW_NAME" >> "$PROJECT_DIR/.autonomous/worker-windows.txt"
   echo "DISPATCH_MODE=headless"
   echo "DISPATCH_PID=$DISPATCH_PID"
   echo "PID: $DISPATCH_PID"

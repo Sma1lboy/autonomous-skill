@@ -68,4 +68,4 @@ if [ ! -f "$ARCHIVE_FILE" ]; then
   exit 1
 fi
 
-python3 -c "import json; print(json.dumps(json.load(open('$ARCHIVE_FILE')), indent=2))"
+python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$ARCHIVE_FILE"

@@ -47,10 +47,10 @@ fi
 
 # Parse summary or construct fallback
 if [ -f "$SUMMARY_FILE" ]; then
-  STATUS=$(python3 -c "import json; print(json.load(open('$SUMMARY_FILE')).get('status','unknown'))" 2>/dev/null || echo "unknown")
-  SUMMARY=$(python3 -c "import json; print(json.load(open('$SUMMARY_FILE')).get('summary','No summary'))" 2>/dev/null || echo "No summary")
-  COMMITS=$(python3 -c "import json; print(json.dumps(json.load(open('$SUMMARY_FILE')).get('commits',[])))" 2>/dev/null || echo "[]")
-  DIR_COMPLETE=$(python3 -c "import json; print(str(json.load(open('$SUMMARY_FILE')).get('direction_complete',False)).lower())" 2>/dev/null || echo "false")
+  STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','unknown'))" "$SUMMARY_FILE" 2>/dev/null || echo "unknown")
+  SUMMARY=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('summary','No summary'))" "$SUMMARY_FILE" 2>/dev/null || echo "No summary")
+  COMMITS=$(python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])).get('commits',[])))" "$SUMMARY_FILE" 2>/dev/null || echo "[]")
+  DIR_COMPLETE=$(python3 -c "import json,sys; print(str(json.load(open(sys.argv[1])).get('direction_complete',False)).lower())" "$SUMMARY_FILE" 2>/dev/null || echo "false")
 else
   STATUS="unknown"
   LATEST=$(git log --oneline -1 2>/dev/null || echo "")

@@ -153,7 +153,7 @@ except Exception as e:
 # ── Commands ─────────────────────────────────────────────────────────────
 
 cmd_init() {
-  mkdir -p "$STATE_DIR"
+  mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
   if [ ! -f "$BACKLOG_FILE" ]; then
     write_backlog '{"version":1,"items":[]}'
     echo "initialized"
@@ -198,7 +198,7 @@ cmd_add() {
     echo "$valid_dims" | grep -qw "$dimension" || die "Invalid dimension: $dimension"
   fi
 
-  mkdir -p "$STATE_DIR"
+  mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
   backlog_lock
 
   local state
@@ -435,7 +435,7 @@ cmd_update() {
       esac
       ;;
     sprint)
-      python3 -c "int('$value')" 2>/dev/null || die "sprint must be numeric, got: $value"
+      python3 -c "import sys; int(sys.argv[1])" "$value" 2>/dev/null || die "sprint must be numeric, got: $value"
       ;;
     triaged)
       case "$value" in
@@ -523,10 +523,11 @@ cmd_prune() {
 
   # Validate max_age_days
   python3 -c "
-v = int('$max_age_days')
+import sys
+v = int(sys.argv[1])
 if v < 0:
     raise ValueError('negative')
-" 2>/dev/null || die "max-age-days must be a non-negative integer, got: $max_age_days"
+" "$max_age_days" 2>/dev/null || die "max-age-days must be a non-negative integer, got: $max_age_days"
 
   backlog_lock
 

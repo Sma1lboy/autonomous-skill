@@ -148,7 +148,7 @@ except Exception as e:
 # ── Lock management ───────────────────────────────────────────────────────
 
 acquire_lock() {
-  mkdir -p "$STATE_DIR"
+  mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
   if [ -f "$LOCK_FILE" ]; then
     local lock_pid
     lock_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
@@ -181,13 +181,14 @@ cmd_init() {
   [[ "$max_sprints" =~ ^[0-9]+$ ]] || die "max-sprints must be a positive integer, got: $max_sprints"
   [ "$max_sprints" -gt 0 ] || die "max-sprints must be > 0, got: $max_sprints"
 
-  mkdir -p "$STATE_DIR"
+  mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
   # Clean stale sprint summaries from prior sessions
   rm -f "$STATE_DIR/sprint-summary.json"
   rm -f "$STATE_DIR"/sprint-*-summary.json
   acquire_lock
 
-  local session_id="conductor-$(date +%s)"
+  local session_id
+  session_id="conductor-$(date +%s)"
   local max_directed
   # 70% of total sprints for directed phase
   max_directed=$(python3 -c "import sys; print(max(1, int(int(sys.argv[1]) * 0.7)))" "$max_sprints")
@@ -365,7 +366,7 @@ cmd_explore_score() {
   local score="${4:-}"
   [ -z "$dimension" ] || [ -z "$score" ] && die "Usage: conductor-state.sh explore-score <project-dir> <dimension> <score>"
   # Validate score is a number (integer or float, including negative)
-  python3 -c "float('$score')" 2>/dev/null || die "score must be numeric, got: $score"
+  python3 -c "import sys; float(sys.argv[1])" "$score" 2>/dev/null || die "score must be numeric, got: $score"
   # Validate dimension is known
   local valid_dims="test_coverage error_handling security code_quality documentation architecture performance dx"
   echo "$valid_dims" | grep -qw "$dimension" || die "unknown dimension: $dimension (valid: $valid_dims)"

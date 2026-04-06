@@ -89,18 +89,18 @@ _LAST_COMMIT=$(cd "$PROJECT_DIR" && git log --oneline -1 2>/dev/null || echo "")
 while true; do
   # Check comms.json status
   if [ -f "$COMMS_FILE" ]; then
-    STATUS=$(python3 -c "import json; d=json.load(open('$COMMS_FILE')); print(d.get('status','idle'))" 2>/dev/null || echo "idle")
+    STATUS=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','idle'))" "$COMMS_FILE" 2>/dev/null || echo "idle")
 
     if [ "$STATUS" = "done" ]; then
       echo "=== WORKER DONE ==="
-      python3 -c "import json; d=json.load(open('$COMMS_FILE')); print(json.dumps(d, indent=2))" 2>/dev/null
+      python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
       echo "WORKER_DONE"
       exit 0
     fi
 
     if [ "$STATUS" = "waiting" ]; then
       echo "=== COMMS: WORKER ASKING ==="
-      python3 -c "import json; d=json.load(open('$COMMS_FILE')); print(json.dumps(d, indent=2))" 2>/dev/null
+      python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2))" "$COMMS_FILE" 2>/dev/null
       echo "WORKER_ASKING"
       exit 0
     fi

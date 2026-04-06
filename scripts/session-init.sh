@@ -29,7 +29,7 @@ cd "$PROJECT_DIR"
 
 SESSION_BRANCH="auto/session-$(date +%s)"
 git checkout -b "$SESSION_BRANCH"
-mkdir -p .autonomous
+mkdir -p .autonomous && chmod 700 .autonomous
 
 bash "$SCRIPT_DIR/scripts/conductor-state.sh" init "$PROJECT_DIR" "$DIRECTION" "$MAX_SPRINTS" >/dev/null
 

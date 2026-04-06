@@ -38,27 +38,27 @@ SPRINT_NUM="${6:-}"
 cd "$PROJECT_DIR"
 
 python3 -c "
-import json, subprocess
+import json, subprocess, sys
 
 commits = subprocess.run(['git', 'log', '--oneline', '-10'], capture_output=True, text=True).stdout.strip().split('\n')
 recent = [c for c in commits[:5] if c]
 
 summary = {
-    'status': '$STATUS',
+    'status': sys.argv[1],
     'commits': recent,
-    'summary': '''$SUMMARY''',
-    'iterations_used': $ITERATIONS,
-    'direction_complete': $DIR_COMPLETE
+    'summary': sys.argv[2],
+    'iterations_used': int(sys.argv[3]),
+    'direction_complete': sys.argv[4].lower() == 'true'
 }
 
 with open('.autonomous/sprint-summary.json', 'w') as f:
     json.dump(summary, f, indent=2)
 print(json.dumps(summary, indent=2))
-"
+" "$STATUS" "$SUMMARY" "$ITERATIONS" "$DIR_COMPLETE"
 
 # Archive comms.json for this sprint
 if [ -n "$SPRINT_NUM" ] && [ -f "$PROJECT_DIR/.autonomous/comms.json" ]; then
-  mkdir -p "$PROJECT_DIR/.autonomous/comms-archive"
+  mkdir -p "$PROJECT_DIR/.autonomous/comms-archive" && chmod 700 "$PROJECT_DIR/.autonomous/comms-archive"
   cp "$PROJECT_DIR/.autonomous/comms.json" "$PROJECT_DIR/.autonomous/comms-archive/sprint-${SPRINT_NUM}.json"
 fi
 
@@ -66,7 +66,7 @@ fi
 if [ -n "$SPRINT_NUM" ]; then
   for wf in "$PROJECT_DIR"/.autonomous/comms-worker-*.json; do
     [ -f "$wf" ] || continue
-    mkdir -p "$PROJECT_DIR/.autonomous/comms-archive"
+    mkdir -p "$PROJECT_DIR/.autonomous/comms-archive" && chmod 700 "$PROJECT_DIR/.autonomous/comms-archive"
     # Extract worker-id: comms-worker-{id}.json -> worker-{id}
     BASENAME=$(basename "$wf" .json)
     WID="${BASENAME#comms-}"
