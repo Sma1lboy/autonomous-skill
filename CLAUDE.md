@@ -66,6 +66,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/cost-tracker.sh` — Track costs per sprint and session total (record, check budget, parse output, report)
 - `scripts/shutdown.sh` — Graceful shutdown propagation: C-c to tmux workers, wait, force-kill survivors, write shutdown-reason.json
 - `scripts/session-diff.sh` — Session diff summary: compare auto/ branch against base, with commit categorization and PR description
+- `scripts/history.sh` — Sprint history viewer: list all auto/ branches with session metadata, detail, compare, JSON output
 
 #### Skills
 
@@ -166,6 +167,7 @@ bash tests/test_shutdown.sh          # 63 tests: graceful shutdown, signal propa
 bash tests/test_session_diff.sh      # 79 tests: diff summary, commit categorization, test detection, JSON/markdown output, session-report integration
 bash tests/test_retry_strategy.sh    # 60 tests: retry analysis, 3-strike rule, adjusted direction, retry-mark, get-sprint, count, edge cases
 bash tests/test_dispatch_timeout.sh  # 28 tests: worker timeout enforcement, env/config override, timeout exit handling, monitor detection
+bash tests/test_history.sh           # 113 tests: history viewer listing, detail, compare, JSON, graceful handling, edge cases
 shellcheck scripts/*.sh               # lint all shell scripts
 ```
 
