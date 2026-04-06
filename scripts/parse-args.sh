@@ -42,6 +42,11 @@ if [ -n "$ARGS" ]; then
       _DIRECTION="$ARGS"
     fi
   fi
+else
+  echo "Hint: /autonomous-skill [sprints] [mission]" >&2
+  echo "  Examples: /autonomous-skill 5 build REST API" >&2
+  echo "            /autonomous-skill fix auth bugs" >&2
+  echo "            /autonomous-skill 3" >&2
 fi
 
 echo "_MAX_SPRINTS=$_MAX_SPRINTS"
