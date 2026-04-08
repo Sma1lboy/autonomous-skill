@@ -25,6 +25,16 @@ Conductor (SKILL.md, user's CC session)
 
 - `SKILL.md` — Conductor: multi-sprint orchestrator, phase management, exploration strategy
 - `SPRINT.md` — Sprint master: per-sprint execution (Sense->Direct->Respond->Summarize)
+- `scripts/startup.sh` — SCRIPT_DIR resolution + project context (shared by all layers)
+- `scripts/parse-args.sh` — Parse ARGS → _MAX_SPRINTS + _DIRECTION
+- `scripts/session-init.sh` — Create session branch, init conductor state + backlog
+- `scripts/build-sprint-prompt.sh` — Inline SPRINT.md + params → sprint-prompt.md
+- `scripts/dispatch.sh` — tmux/headless session dispatch
+- `scripts/monitor-sprint.sh` — Poll for sprint-summary.json
+- `scripts/monitor-worker.sh` — Poll comms.json + tmux/process liveness
+- `scripts/evaluate-sprint.sh` — Read summary JSON, update conductor state
+- `scripts/merge-sprint.sh` — Merge or discard sprint branch
+- `scripts/write-summary.sh` — Generate sprint-summary.json
 - `scripts/conductor-state.sh` — Conductor state management (atomic writes, PID lock, phase transitions)
 - `scripts/explore-scan.sh` — Project scanner: scores 8 exploration dimensions via bash heuristics
 - `scripts/backlog.sh` — Cross-session persistent backlog (progressive disclosure, mkdir locking, max 50 items)
@@ -36,6 +46,7 @@ Conductor (SKILL.md, user's CC session)
 - `.claude/skills/clean-sandbox/SKILL.md` — Reset test sandbox
 - `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
+- `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
 - `OWNER.md.template` — Template for manual persona configuration
 - `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
@@ -61,7 +72,9 @@ Conductor (SKILL.md, user's CC session)
      code quality, etc.) and generates exploration sprint directions
    - **Backlog fallback**: when exploration dimensions are all solid, conductor
      picks from the persistent backlog (`.autonomous/backlog.json`) before stopping
-6. Session ends when all sprints used up, project feels solid, and backlog is empty
+6. **Session wrap-up**: conductor classifies all commits into Feature 1/2/3 groups
+   using sprint directions, writes `.autonomous/session-summary.md` with a PR description
+7. Session ends when all sprints used up, project feels solid, and backlog is empty
 
 ## Comms Protocol
 
@@ -117,6 +130,11 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 
 ## Safety
 
+- All changes on `auto/session-*` branches (never main)
+- Per-sprint branches: each sprint works on its own branch; merged on success, discarded on failure
+- Workers run with `--dangerously-skip-permissions` but excluded from dangerous workflows
+- Excluded workflows: /ship, /land-and-deploy, /careful, /guard
+- 15-minute timeout per CC invocation (configurable via `CC_TIMEOUT`)
 - All changes on `auto/` branches (never main)
 - --permission-mode auto (blocks dangerous operations)
 - Excluded workflows: configured per template (see `templates/<name>/template.md` `## Block` section)
@@ -124,8 +142,11 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 - Session cost budget (`MAX_COST_USD` env var or `--max-cost` flag)
 - SIGINT + sentinel file for graceful shutdown
 - 3-strike rule prevents infinite retry loops
+- Atomic state writes (tmp+mv), PID lock for concurrency safety
 
 ## Testing
+
+294 tests across 6 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
@@ -143,3 +164,23 @@ Test harness uses `tests/claude` (mock CC binary) controlled by env vars:
 - `MOCK_CLAUDE_COMMIT=1` — make a git commit during the mock run
 - `MOCK_CLAUDE_DELAY` — sleep N seconds (for timeout tests)
 - `MOCK_CLAUDE_EXIT` — exit code to return
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+The skill has specialized workflows that produce better results than ad-hoc answers.
+
+Key routing rules:
+- Product ideas, "is this worth building", brainstorming → invoke office-hours
+- Bugs, errors, "why is this broken", 500 errors → invoke investigate
+- Ship, deploy, push, create PR → invoke ship
+- QA, test the site, find bugs → invoke qa
+- Code review, check my diff → invoke review
+- Update docs after shipping → invoke document-release
+- Weekly retro → invoke retro
+- Design system, brand → invoke design-consultation
+- Visual audit, design polish → invoke design-review
+- Architecture review → invoke plan-eng-review
+- Save progress, checkpoint, resume → invoke checkpoint
+- Code quality, health check → invoke health

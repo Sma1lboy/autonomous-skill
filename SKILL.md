@@ -210,6 +210,112 @@ Continue to the next sprint. Stop when:
 - If a sprint can't make progress twice on the same direction, move on.
 - Keep going until sprints are used up or the project genuinely feels solid.
 
+## Session Wrap-up — Feature Classification
+
+**MANDATORY.** Before stopping, regardless of why the session ended (max sprints,
+project solid, no weak dimensions, or graceful shutdown), generate a structured
+session summary that classifies work into features.
+
+### 1. Gather data
+
+```bash
+echo "=== SESSION COMMITS ==="
+git log main..$SESSION_BRANCH --oneline --no-merges
+echo "=== CONDUCTOR STATE ==="
+bash "$SCRIPT_DIR/scripts/conductor-state.sh" read "$(pwd)" 2>/dev/null || echo "STATE_UNAVAILABLE"
+```
+
+**If zero commits:** Write a minimal summary to `.autonomous/session-summary.md`:
+"Session completed with no commits. N sprints attempted, none produced mergeable
+work." Print it. Then stop. Skip the rest of this section.
+
+**If conductor state unavailable:** Fall back to grouping commits by semantic
+similarity using `git log` alone (no sprint-based grouping).
+
+### 2. Classify commits into features
+
+Use sprint directions from `conductor-state.json` as the primary grouping axis:
+
+- Each sprint direction = candidate feature
+- Merge sprints that target the same logical feature (e.g., two sprints both
+  about "backlog" become one Feature)
+- Name each feature concisely: "Backlog System", not "Implement cross-session
+  persistent backlog with progressive disclosure"
+- Map commits to sprints using merge commit messages. The conductor merges
+  sprint branches with `git merge --no-ff -m "sprint N: $SUMMARY"`. Commits
+  between two sprint merge boundaries belong to that sprint.
+- Include fix/test/refactor commits under the feature they support
+- Orphan commits (not between any sprint merge boundaries) go under "Housekeeping"
+- Label features numerically: Feature 1, Feature 2, Feature 3...
+- Each commit within a feature gets a sub-number: 1.1, 1.2, 1.3... so users can
+  reference individual commits for selective revert
+
+### 3. Write session-summary.md
+
+Write to `.autonomous/session-summary.md` and print to the user:
+
+```markdown
+## Session Summary — $SESSION_BRANCH
+
+**Sprints:** N | **Commits:** N | **Status:** complete/partial
+
+### Feature 1: [Concise Name]
+> [1-sentence description of what this feature does]
+- **1.1** `hash` commit message
+- **1.2** `hash` commit message
+- **1.3** `hash` commit message
+
+### Feature 2: [Concise Name]
+> [1-sentence description]
+- **2.1** `hash` commit message
+- **2.2** `hash` commit message
+
+### Housekeeping
+- `hash` chore/docs commits
+
+---
+
+## PR Description
+
+### What changed
+[1 paragraph summarizing all features]
+
+### Features
+- **Feature 1:** [name] — [1 sentence]
+- **Feature 2:** [name] — [1 sentence]
+
+### Testing
+[List test-related commits or note "no tests added"]
+```
+
+The PR Description block is ready to copy-paste into a pull request.
+
+### 4. Revert instructions
+
+After printing the summary, tell the user:
+
+> To revert specific work, say: "revert feature 1", "revert 1.2", or "revert 1.2, 2.1"
+> I'll run `git revert` on the corresponding commits in reverse order.
+
+**When the user asks to revert**, look up the commit hash(es) from session-summary.md
+and run:
+
+```bash
+# Single commit (e.g. "revert 1.2")
+git revert --no-edit <hash>
+
+# Multiple commits — revert in reverse chronological order to avoid conflicts
+git revert --no-edit <hash-N> <hash-N-1> ...
+
+# Whole feature (e.g. "revert feature 1") — revert all sub-commits newest-first
+git revert --no-edit <1.3-hash> <1.2-hash> <1.1-hash>
+```
+
+After reverting, confirm which items were reverted and their new revert commit hashes.
+Then run the project's test/build command (check `package.json` scripts, `Makefile`,
+or `*.sh` test files) to verify nothing is broken. If errors are found, fix them
+before declaring the revert complete.
+
 ## Begin
 
 **ACT NOW.** Your first action: run the Startup block, then Pre-flight, then
