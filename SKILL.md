@@ -246,7 +246,9 @@ Use sprint directions from `conductor-state.json` as the primary grouping axis:
   between two sprint merge boundaries belong to that sprint.
 - Include fix/test/refactor commits under the feature they support
 - Orphan commits (not between any sprint merge boundaries) go under "Housekeeping"
-- Label features alphabetically: Feature A, Feature B, Feature C...
+- Label features numerically: Feature 1, Feature 2, Feature 3...
+- Each commit within a feature gets a sub-number: 1.1, 1.2, 1.3... so users can
+  reference individual commits for selective revert
 
 ### 3. Write session-summary.md
 
@@ -257,14 +259,16 @@ Write to `.autonomous/session-summary.md` and print to the user:
 
 **Sprints:** N | **Commits:** N | **Status:** complete/partial
 
-### Feature A: [Concise Name]
+### Feature 1: [Concise Name]
 > [1-sentence description of what this feature does]
-- `hash` commit message
-- `hash` commit message
+- **1.1** `hash` commit message
+- **1.2** `hash` commit message
+- **1.3** `hash` commit message
 
-### Feature B: [Concise Name]
+### Feature 2: [Concise Name]
 > [1-sentence description]
-- `hash` commit message
+- **2.1** `hash` commit message
+- **2.2** `hash` commit message
 
 ### Housekeeping
 - `hash` chore/docs commits
@@ -277,14 +281,40 @@ Write to `.autonomous/session-summary.md` and print to the user:
 [1 paragraph summarizing all features]
 
 ### Features
-- **Feature A:** [name] — [1 sentence]
-- **Feature B:** [name] — [1 sentence]
+- **Feature 1:** [name] — [1 sentence]
+- **Feature 2:** [name] — [1 sentence]
 
 ### Testing
 [List test-related commits or note "no tests added"]
 ```
 
 The PR Description block is ready to copy-paste into a pull request.
+
+### 4. Revert instructions
+
+After printing the summary, tell the user:
+
+> To revert specific work, say: "revert feature 1", "revert 1.2", or "revert 1.2, 2.1"
+> I'll run `git revert` on the corresponding commits in reverse order.
+
+**When the user asks to revert**, look up the commit hash(es) from session-summary.md
+and run:
+
+```bash
+# Single commit (e.g. "revert 1.2")
+git revert --no-edit <hash>
+
+# Multiple commits — revert in reverse chronological order to avoid conflicts
+git revert --no-edit <hash-N> <hash-N-1> ...
+
+# Whole feature (e.g. "revert feature 1") — revert all sub-commits newest-first
+git revert --no-edit <1.3-hash> <1.2-hash> <1.1-hash>
+```
+
+After reverting, confirm which items were reverted and their new revert commit hashes.
+Then run the project's test/build command (check `package.json` scripts, `Makefile`,
+or `*.sh` test files) to verify nothing is broken. If errors are found, fix them
+before declaring the revert complete.
 
 ## Begin
 
