@@ -39,6 +39,10 @@ Conductor (SKILL.md, user's CC session)
 - `OWNER.md.template` — Template for manual persona configuration
 - `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
+- `skill-config.json` — Default template selector (overridden per-project at `.autonomous/skill-config.json`)
+- `templates/gstack/template.md` — Worker slash-command set for the gstack toolchain
+- `templates/default/template.md` — Generic worker guidance with no toolchain assumptions
+- `scripts/build-sprint-prompt.sh` — Inlines SPRINT.md + template allow/block sections into the sprint master prompt
 
 ## How it works
 
@@ -89,11 +93,33 @@ Cross-session persistent work queue in `.autonomous/backlog.json`:
 - `mkdir`-based atomic locking for concurrent writes (workers + conductor)
 - Management: `scripts/backlog.sh` (init, add, list, read, pick, update, stats, prune)
 
+## Templates
+
+Sprint master worker-task suggestions and boundary blacklists are driven by
+swappable templates, not hardcoded. Each template lives at
+`templates/<name>/template.md` with two sections: `## Allow` (worker-task
+examples) and `## Block` (commands the sprint master must never invoke).
+
+Template selection hierarchy (first match wins):
+1. `<project>/.autonomous/skill-config.json` — per-project override
+2. `<skill_root>/skill-config.json` — global default (ships as `gstack`)
+3. Fallback to `default` template if neither exists or requested template is missing
+
+Config format: `{"template": "<name>"}`. Unknown names, malformed JSON, and
+path-traversal attempts (`../`, dot-prefixes) all fall through to the default
+template. `scripts/build-sprint-prompt.sh` resolves the template, extracts the
+Allow/Block sections with python3, and substitutes them into the
+`<!-- AUTO:TEMPLATE_ALLOW -->` / `<!-- AUTO:TEMPLATE_BLOCK -->` markers in
+SPRINT.md as it writes `.autonomous/sprint-prompt.md`.
+
+To add a new template: create `templates/<name>/template.md` with both sections,
+then set `{"template":"<name>"}` in `skill-config.json` (or the project override).
+
 ## Safety
 
 - All changes on `auto/` branches (never main)
 - --permission-mode auto (blocks dangerous operations)
-- Excluded workflows: /ship, /land-and-deploy, /careful, /guard
+- Excluded workflows: configured per template (see `templates/<name>/template.md` `## Block` section)
 - 15-minute timeout per CC invocation
 - Session cost budget (`MAX_COST_USD` env var or `--max-cost` flag)
 - SIGINT + sentinel file for graceful shutdown
@@ -108,6 +134,7 @@ bash tests/test_persona.sh      # 20 tests: OWNER.md generation, CLI help
 bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge cases, CLI help
 bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
 bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
+bash tests/test_build_sprint_prompt.sh  # 25 tests: template resolution, allow/block injection, fallback, path-traversal guard
 shellcheck scripts/*.sh         # lint all shell scripts
 ```
 

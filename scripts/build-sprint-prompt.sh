@@ -33,6 +33,37 @@ fi
 # Get title-only backlog for sprint master context (lightweight, no descriptions)
 BACKLOG_TITLES=$(bash "$SCRIPT_DIR/scripts/backlog.sh" list "$PROJECT_DIR" open titles-only 2>/dev/null || echo "")
 
+# ── Template resolution ──────────────────────────────────────────────────
+# Hierarchy: $PROJECT_DIR/.autonomous/skill-config.json overrides
+#            $SCRIPT_DIR/skill-config.json. Falls back to "default".
+TEMPLATE_NAME=$(python3 -c "
+import json, sys
+def load(p):
+    try:
+        with open(p) as f:
+            d = json.load(f)
+        v = d.get('template')
+        return v if isinstance(v, str) and v else None
+    except Exception:
+        return None
+proj = load(sys.argv[1])
+root = load(sys.argv[2])
+print(proj or root or 'default')
+" "$PROJECT_DIR/.autonomous/skill-config.json" "$SCRIPT_DIR/skill-config.json")
+
+# Path-traversal guard: reject slashes and dot-prefixes
+case "$TEMPLATE_NAME" in
+  */*|.*) TEMPLATE_NAME="default" ;;
+esac
+
+# Resolve template file: requested -> default -> empty (handled in renderer)
+TEMPLATE_FILE="$SCRIPT_DIR/templates/$TEMPLATE_NAME/template.md"
+if [ ! -f "$TEMPLATE_FILE" ]; then
+  [ "$TEMPLATE_NAME" != "default" ] && echo "WARN: template '$TEMPLATE_NAME' not found, using default" >&2
+  TEMPLATE_FILE="$SCRIPT_DIR/templates/default/template.md"
+fi
+[ -f "$TEMPLATE_FILE" ] || TEMPLATE_FILE=""
+
 # Use printf instead of echo — echo mangles content starting with -n/-e or containing \c
 {
   printf '%s\n' "You are a sprint master. Follow the instructions below exactly."
@@ -45,7 +76,46 @@ BACKLOG_TITLES=$(bash "$SCRIPT_DIR/scripts/backlog.sh" list "$PROJECT_DIR" open 
   printf '%s\n' "PREVIOUS_SUMMARY: $PREV_SUMMARY"
   printf '%s\n' "BACKLOG_TITLES: $BACKLOG_TITLES"
   printf '\n'
-  cat "$SCRIPT_DIR/SPRINT.md"
+  python3 -c "
+import sys
+sprint_path = sys.argv[1]
+tpl_path = sys.argv[2]
+
+with open(sprint_path) as f:
+    sprint = f.read()
+
+def extract(body, header):
+    # Walk lines; capture content between '## {header}' and next '## ' (or EOF).
+    lines = body.splitlines(keepends=True)
+    capturing = False
+    out = []
+    for line in lines:
+        if line.startswith('## '):
+            if capturing:
+                break
+            if line.strip() == '## ' + header:
+                capturing = True
+                continue
+        elif capturing:
+            out.append(line)
+    return ''.join(out).strip('\n')
+
+allow, block = '', ''
+if tpl_path:
+    try:
+        with open(tpl_path) as f:
+            tpl = f.read()
+        allow = extract(tpl, 'Allow')
+        block = extract(tpl, 'Block')
+    except Exception:
+        pass
+
+# Replace only the first occurrence of each marker (defends against
+# self-injection loops if a template ever embeds the marker itself).
+sprint = sprint.replace('<!-- AUTO:TEMPLATE_ALLOW -->', allow, 1)
+sprint = sprint.replace('<!-- AUTO:TEMPLATE_BLOCK -->', block, 1)
+sys.stdout.write(sprint)
+" "$SCRIPT_DIR/SPRINT.md" "$TEMPLATE_FILE"
 } > "$PROJECT_DIR/.autonomous/sprint-prompt.md"
 
 echo "Sprint prompt written to $PROJECT_DIR/.autonomous/sprint-prompt.md"

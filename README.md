@@ -117,6 +117,17 @@ Each layer runs in its own Claude session — fresh context per sprint, no bleed
 
 **Backlog** — A persistent work queue (`.autonomous/backlog.json`) that survives across sessions. Workers log out-of-scope discoveries, the conductor decomposes large missions into deferred items. When exploration runs dry, idle sprints pick from the backlog. Progressive disclosure: sprint masters only see one-line titles, the conductor sees full descriptions.
 
+### Templates
+
+Worker-task suggestions and boundary blacklists are driven by swappable templates at `templates/<name>/template.md`. Ships with two: `gstack` (default — uses `/office-hours`, `/qa`, `/investigate`, blocks `/ship` etc.) and `default` (generic, no toolchain commands).
+
+Select a template per project by writing `.autonomous/skill-config.json` in your project root:
+
+```json
+{ "template": "default" }
+```
+
+The project-level override beats the skill-root default at `~/.claude/skills/autonomous-skill/skill-config.json`. Unknown template names fall through to `default`. To add a new template, create `templates/<name>/template.md` with `## Allow` and `## Block` sections and point the config at it.
 ---
 
 ## How It Works
@@ -187,6 +198,10 @@ autonomous-skill/
 ├── SPRINT.md                         # Sprint master: per-sprint execution (inlined into prompt)
 ├── CLAUDE.md                         # Project instructions for Claude
 ├── OWNER.md.template                 # Persona template for manual config
+├── skill-config.json                 # Default template selector (per-project override at .autonomous/)
+├── templates/
+│   ├── gstack/template.md            # Allow/Block sections for gstack toolchain
+│   └── default/template.md           # Generic fallback, no toolchain assumptions
 ├── scripts/
 │   ├── startup.sh                    # SCRIPT_DIR resolution + project context (shared)
 │   ├── parse-args.sh                 # Parse ARGS → _MAX_SPRINTS + _DIRECTION
@@ -213,6 +228,7 @@ autonomous-skill/
 │   ├── test_explore_scan.sh          # 45 tests: dimension scoring heuristics
 │   ├── test_loop.sh                  # 20 tests: standalone launcher
 │   ├── test_backlog.sh               # 76 tests: CRUD, progressive disclosure
+│   ├── test_build_sprint_prompt.sh   # 25 tests: template resolution, allow/block injection
 │   └── claude                        # Mock CC binary for testing
 ├── .claude/skills/
 │   ├── test-worker/SKILL.md          # Spawns worker + auto-answering master

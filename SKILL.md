@@ -206,7 +206,7 @@ Continue to the next sprint. Stop when:
 
 ## Boundaries
 
-- Never invoke /ship, /land-and-deploy, /careful, or /guard.
+- Never invoke shipping or deployment workflows from autonomous sessions.
 - If a sprint can't make progress twice on the same direction, move on.
 - Keep going until sprints are used up or the project genuinely feels solid.
 

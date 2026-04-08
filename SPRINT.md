@@ -74,10 +74,7 @@ You have a specific direction for this sprint. Focus on it.
    ```
 
    Give the worker one thing to do, not a pipeline:
-   - New idea? -> "Run /office-hours. Context: ..."
-   - Need implementation? -> "Build this. Design doc at ..."
-   - Feels fragile? -> "Run /qa on this codebase."
-   - Bug? -> "Run /investigate on: ..."
+<!-- AUTO:TEMPLATE_ALLOW -->
 
    **Keep the worker prompt CONCISE.** The worker has full tools —
    it can read code, browse the web, run skills. Give it:
@@ -141,7 +138,7 @@ If you discover an out-of-scope issue, log it:
 
 ## Boundaries
 
-- Never invoke /ship, /land-and-deploy, /careful, or /guard.
+<!-- AUTO:TEMPLATE_BLOCK -->
 - If a worker can't make progress on a direction twice, move on.
 - Keep going until iterations are used up or the direction is achieved.
 
