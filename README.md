@@ -20,9 +20,9 @@ Total cost: $4.20. No meetings required.<br>
 **That's autonomous-skill.**
 
 A self-driving project agent for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
-Drop it into any git repo, run `/autonomous-skill`, go to sleep.
+Drop it into any git repo, run `/autonomous`, go to sleep.
 
-[Quickstart](#quickstart) · [Architecture](#architecture) · [How It Works](#how-it-works) · [Configuration](#configuration) · [Safety](#safety) · [Testing](#testing)
+[Quickstart](#quickstart) · [Skills](#skills) · [Architecture](#architecture) · [How It Works](#how-it-works) · [Configuration](#configuration) · [Safety](#safety) · [Testing](#testing)
 
 </div>
 
@@ -30,9 +30,9 @@ Drop it into any git repo, run `/autonomous-skill`, go to sleep.
 
 ## Install — 30 seconds
 
-Requirements: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Git, Bash 4+
+Requirements: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Git, Python 3.9+
 
-Optional but recommended: [gstack](https://github.com/garrytan/gstack) (for better performance), [tmux](https://github.com/tmux/tmux) (visible worker windows), [jq](https://jqlang.github.io/jq/) (persona generation)
+Optional: [tmux](https://github.com/tmux/tmux) (visible worker windows), [jq](https://jqlang.github.io/jq/) (persona generation)
 
 Open Claude Code and paste this. Claude does the rest:
 
@@ -46,40 +46,50 @@ Or install manually:
 git clone --single-branch --depth 1 https://github.com/Sma1lboy/autonomous-skill.git ~/.claude/skills/autonomous-skill
 ```
 
-Then in any git repo, open Claude Code and run `/autonomous-skill`. It creates an `auto/session-*` branch and starts working.
+Then in any git repo, open Claude Code and run `/autonomous` or `/quickdo`.
 
 ---
 
-## Usage
+## Skills
 
-### Fully Unattended Mode
+This package ships two public skills:
 
-By default, Claude Code will still prompt you for permissions on certain operations (file writes, bash commands, etc.) during the conductor session. If you want a **truly hands-off** experience — close your laptop and come back to finished work — start Claude Code with:
+### `/autonomous` — Full multi-sprint orchestration
 
-```bash
-claude --dangerously-skip-permissions
-```
-
-Then run `/autonomous-skill` as usual. The conductor, sprint masters, and workers will all run without permission prompts.
-
-> **Note**: This flag skips all permission checks. The built-in [safety guards](#safety) (branch isolation, excluded workflows, timeouts, cost budgets) still apply, but you should review the changes on the `auto/session-*` branch before merging to main.
+The complete pipeline: Conductor → Sprint Master → Worker. Runs multiple sprints,
+transitions between directed work and autonomous exploration, manages sprint branches,
+evaluates results between sprints.
 
 ```bash
 # Default: 10 sprints
-/autonomous-skill
+/autonomous
 
 # Quick: 3 sprints
-/autonomous-skill 3
+/autonomous 3
 
 # With direction: focus on a specific area
-/autonomous-skill 5 build REST API
-
-# Unlimited sprints
-/autonomous-skill unlimited
+/autonomous 5 build REST API
 
 # Direction only (default 10 sprints)
-/autonomous-skill fix all auth bugs
+/autonomous fix all auth bugs
 ```
+
+### `/quickdo` — Fast single-sprint execution
+
+Lightweight mode. Skips the conductor, runs one sprint master directly via blocking
+`claude -p`. No tmux, no multi-sprint state, no monitor polling. One direction, one
+sprint, done.
+
+```bash
+# Single task
+/quickdo add login page with GitHub OAuth
+
+# Quick fix
+/quickdo fix the broken unit tests
+```
+
+Best for tasks that fit in a single sprint — a full page, a complete feature stage,
+a test suite, a refactor.
 
 ### Standalone (outside Claude Code)
 
@@ -95,16 +105,16 @@ AUTONOMOUS_DIRECTION="fix auth bugs" python3 scripts/loop.py /path/to/project
 Three-layer hierarchy with full context isolation between layers:
 
 ```
-Conductor (SKILL.md — runs in user's Claude Code session)
+Conductor (autonomous/SKILL.md — runs in user's Claude Code session)
   │
   ├── Plans sprint directions (directed phase or exploration phase)
-  ├── Dispatches sprint masters via claude -p in tmux
+  ├── Dispatches sprint masters via claude -p
   ├── Evaluates sprint results, manages phase transitions
   │
   └── Sprint Master (SPRINT.md — separate claude -p session)
         │
         ├── Sense → Direct → Respond → Summarize loop
-        ├── Dispatches workers via tmux / headless claude -p
+        ├── Dispatches workers via claude -p
         ├── Answers worker questions via comms.json protocol
         │
         └── Worker (full Claude session with all tools)
@@ -114,6 +124,8 @@ Conductor (SKILL.md — runs in user's Claude Code session)
 ```
 
 Each layer runs in its own Claude session — fresh context per sprint, no bleed between layers.
+
+`/quickdo` flattens this to two layers: it skips the conductor and runs the sprint master directly.
 
 **Backlog** — A persistent work queue (`.autonomous/backlog.json`) that survives across sessions. Workers log out-of-scope discoveries, the conductor decomposes large missions into deferred items. When exploration runs dry, idle sprints pick from the backlog. Progressive disclosure: sprint masters only see one-line titles, the conductor sees full descriptions.
 
@@ -128,6 +140,7 @@ Select a template per project by writing `.autonomous/skill-config.json` in your
 ```
 
 The project-level override beats the skill-root default at `~/.claude/skills/autonomous-skill/skill-config.json`. Unknown template names fall through to `default`. To add a new template, create `templates/<name>/template.md` with `## Allow` and `## Block` sections and point the config at it.
+
 ---
 
 ## How It Works
@@ -187,6 +200,7 @@ Valid statuses: `idle`, `waiting`, `answered`, `done`.
 | `CC_TIMEOUT` | `900` | Timeout per CC invocation (seconds) |
 | `AUTONOMOUS_DIRECTION` | _(none)_ | Session focus (e.g., "fix auth bugs") |
 | `MAX_COST_USD` | _(none)_ | Stop when total cost exceeds this |
+| `DISPATCH_MODE` | _(auto)_ | `blocking` (no tmux), `headless` (background), or auto (tmux if available) |
 
 ---
 
@@ -194,7 +208,8 @@ Valid statuses: `idle`, `waiting`, `answered`, `done`.
 
 ```
 autonomous-skill/
-├── SKILL.md                          # Conductor: multi-sprint orchestrator
+├── autonomous/SKILL.md               # /autonomous — multi-sprint conductor
+├── quickdo/SKILL.md                  # /quickdo — fast single-sprint mode
 ├── SPRINT.md                         # Sprint master: per-sprint execution (inlined into prompt)
 ├── CLAUDE.md                         # Project instructions for Claude
 ├── OWNER.md.template                 # Persona template for manual config
@@ -207,7 +222,7 @@ autonomous-skill/
 │   ├── parse-args.py                 # Parse ARGS → _MAX_SPRINTS + _DIRECTION
 │   ├── session-init.py               # Create session branch, init state + backlog
 │   ├── build-sprint-prompt.py        # Inline SPRINT.md + params → sprint-prompt.md
-│   ├── dispatch.py                   # tmux/headless session dispatch
+│   ├── dispatch.py                   # Blocking / tmux / headless session dispatch
 │   ├── monitor-sprint.py             # Poll for sprint-summary.json
 │   ├── monitor-worker.py             # Poll comms.json + tmux/process liveness
 │   ├── evaluate-sprint.py            # Read summary JSON, update conductor state
@@ -229,8 +244,10 @@ autonomous-skill/
 │   ├── test_loop.sh                  # 20 tests: standalone launcher
 │   ├── test_backlog.sh               # 76 tests: CRUD, progressive disclosure
 │   ├── test_build_sprint_prompt.sh   # 25 tests: template resolution, allow/block injection
+│   ├── test_eval_output.sh           # 35 tests: eval safety, tmux cleanup
 │   └── claude                        # Mock CC binary for testing
-├── .claude/skills/
+├── .claude/skills/                   # Internal dev/test skills
+│   ├── smoke-test/SKILL.md           # E2E pipeline smoke test
 │   ├── test-worker/SKILL.md          # Spawns worker + auto-answering master
 │   ├── capture-worker/SKILL.md       # Capture worker JSONL for inspection
 │   ├── diff-sessions/SKILL.md        # Compare two sessions side-by-side
@@ -251,12 +268,11 @@ autonomous-skill/
 
 | Guard | How |
 |-------|-----|
-| **Branch isolation** | All work on `auto/session-*` branches. Never touches main. |
+| **Branch isolation** | All work on `auto/session-*` or `auto/quickdo-*` branches. Never touches main. |
 | **Per-sprint branches** | Each sprint works on its own branch; merged on success, discarded on failure. |
-| **Permission mode** | Workers run with `--dangerously-skip-permissions` but excluded from dangerous workflows. |
-| **Excluded workflows** | `/ship`, `/land-and-deploy`, `/careful`, `/guard` are forbidden. |
 | **Timeout** | Each CC invocation capped at 15 min (configurable via `CC_TIMEOUT`). |
 | **Cost budget** | `MAX_COST_USD` env var stops the session when exceeded. |
+| **Excluded workflows** | Configured per template (see `templates/<name>/template.md` `## Block` section). |
 | **Graceful shutdown** | SIGINT + sentinel file for clean exit across all layers. |
 | **3-strike rule** | Same approach fails 3 times → stop and report. |
 | **Atomic state** | Conductor state uses tmp+mv writes, PID lock for concurrency safety. |
@@ -265,7 +281,7 @@ autonomous-skill/
 
 ## Testing
 
-294 tests across 6 suites, all pure bash:
+329 tests across 7 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests
@@ -274,6 +290,7 @@ bash tests/test_persona.sh      # 20 tests
 bash tests/test_explore_scan.sh # 45 tests
 bash tests/test_loop.sh         # 20 tests
 bash tests/test_backlog.sh      # 76 tests
+bash tests/test_eval_output.sh  # 35 tests
 python3 -m compileall scripts   # quick syntax check for Python helpers
 ```
 
