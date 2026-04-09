@@ -1,0 +1,60 @@
+{
+  "success": true,
+  "version": "v1.1.0",
+  "release_date": "2024-12-25",
+  "grouped_changes": {
+    "feature": [
+      {
+        "description": "Added dark mode toggle in settings",
+        "category": "feature",
+        "confidence": "high"
+      },
+      {
+        "description": "New export to PDF option in reports",
+        "category": "feature",
+        "confidence": "high"
+      }
+    ],
+    "enhancement": [
+      {
+        "description": "Improved loading speed when opening large files",
+        "category": "enhancement",
+        "confidence": "medium"
+      },
+      {
+        "description": "Search now finds partial matches",
+        "category": "enhancement",
+        "confidence": "medium"
+      }
+    ],
+    "bugfix": [
+      {
+        "description": "Fixed issue where login would fail on slow connections",
+        "category": "bugfix",
+        "confidence": "high"
+      },
+      {
+        "description": "Resolved crash when uploading files over 10MB",
+        "category": "bugfix",
+        "confidence": "high"
+      }
+    ],
+    "change": [
+      {
+        "description": "Settings menu has been reorganized for clarity",
+        "category": "change",
+        "confidence": "medium"
+      }
+    ],
+    "breaking": [
+      {
+        "description": "Database format updated - run migration tool before upgrading",
+        "category": "breaking",
+        "confidence": "high"
+      }
+    ]
+  },
+  "markdown_output": "# Release Notes - v1.1.0\n\n*Released: 2024-12-25*\n\n## Breaking Changes\n- Database format updated - run migration tool before upgrading\n\n## New Features\n- Added dark mode toggle in settings\n- New export to PDF option in reports\n\n## Enhancements\n- Improved loading speed when opening large files\n- Search now finds partial matches\n\n## Bug Fixes\n- Fixed issue where login would fail on slow connections\n- Resolved crash when uploading files over 10MB\n\n## Changes\n- Settings menu has been reorganized for clarity\n\n---\n\n**Notes:**\n- Dark mode requires display driver update on Windows 7\n- PDF export needs Adobe Reader installed",
+  "slack_output": "*Release v1.1.0 is now available!*\n\n*Breaking Changes*\n• Database format updated - run migration tool before upgrading\n\n*New Features*\n• Added dark mode toggle in settings\n• New export to PDF option in reports\n\n*Enhancements*\n• Improved loading speed when opening large files\n• Search now finds partial matches\n\n*Bug Fixes*\n• Fixed issue where login would fail on slow connections\n• Resolved crash when uploading files over 10MB",
+  "output_file": "RELEASE_NOTES_v1.1.0.md"
+}

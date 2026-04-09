@@ -1,0 +1,11 @@
+{
+  "repo_path": "C:\\Projects\\MyApp",
+  "from_tag": "v1.0.0",
+  "to_tag": "v1.1.0",
+  "output_format": "markdown",
+  "slack_ready": false,
+  "footnotes": [
+    "Dark mode requires display driver update on Windows 7",
+    "PDF export needs Adobe Reader installed"
+  ]
+}

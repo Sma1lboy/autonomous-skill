@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# Git Hook: post-tag (custom hook, needs manual triggering)
+#
+# Automatically generates a changelog when a new tag is created.
+# This hook should be triggered after creating a git tag.
+#
+# Installation:
+#   1. Copy this file to .git/hooks/post-tag
+#   2. Make it executable: chmod +x .git/hooks/post-tag
+#   3. Create a git alias to trigger it:
+#      git config alias.release '!f() { git tag "$1" && .git/hooks/post-tag "$1"; }; f'
+#
+# Usage:
+#   git release v1.2.0
+#
+# Note: Git doesn't have a native post-tag hook, so we use a wrapper script.
+
+set -e
+
+# Get the tag that was just created
+NEW_TAG="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo '')}"
+
+if [ -z "$NEW_TAG" ]; then
+    echo "No tag specified or found."
+    exit 0
+fi
+
+# Find the previous tag for comparison
+PREVIOUS_TAG=$(git describe --tags --abbrev=0 "$NEW_TAG^" 2>/dev/null || echo '')
+
+if [ -z "$PREVIOUS_TAG" ]; then
+    echo "No previous tag found. Generating changelog for all commits up to $NEW_TAG..."
+    RANGE_ARG="--since $NEW_TAG^{}"
+else
+    echo "Generating changelog from $PREVIOUS_TAG to $NEW_TAG..."
+    RANGE_ARG="--from $PREVIOUS_TAG --to $NEW_TAG"
+fi
+
+# Find the repo-changelog skill directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Look for generate_changelog.py in common locations
+if [ -f "$SCRIPT_DIR/../generate_changelog.py" ]; then
+    CHANGELOG_SCRIPT="$SCRIPT_DIR/../generate_changelog.py"
+elif [ -f ".claude/skills/repo-changelog/generate_changelog.py" ]; then
+    CHANGELOG_SCRIPT=".claude/skills/repo-changelog/generate_changelog.py"
+elif [ -f "$HOME/.claude/skills/repo-changelog/generate_changelog.py" ]; then
+    CHANGELOG_SCRIPT="$HOME/.claude/skills/repo-changelog/generate_changelog.py"
+else
+    echo "Warning: Could not find generate_changelog.py"
+    echo "Please ensure the repo-changelog skill is installed."
+    exit 1
+fi
+
+# Generate the changelog
+echo ""
+echo "Generating release notes..."
+python3 "$CHANGELOG_SCRIPT" $RANGE_ARG --version "$NEW_TAG"
+
+echo ""
+echo "Release notes generated successfully!"
+echo "Check the RELEASE_NOTES folder for the output."

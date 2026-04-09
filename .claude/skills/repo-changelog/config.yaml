@@ -1,0 +1,468 @@
+# Repo-Changelog Configuration
+# All settings can be customized here
+
+# =============================================================================
+# OUTPUT SETTINGS
+# =============================================================================
+output:
+  # Directory for release notes (created if doesn't exist)
+  directory: "RELEASE_NOTES"
+
+  # Filename format placeholders:
+  #   {version} - Version tag (e.g., v1.1.0)
+  #   {date} - Date only (YYYYMMDD)
+  #   {datetime} - Date and time (YYYYMMDD_HHMMSS)
+  filename_format: "RELEASE_NOTES_{version}_{datetime}.md"
+
+  # Fallback when no version specified
+  filename_format_no_version: "RELEASE_NOTES_{datetime}.md"
+
+  # Datetime format for filenames (Python strftime)
+  datetime_format: "%Y%m%d_%H%M%S"
+
+  # Include release date in header
+  include_date_header: true
+
+  # Date format for header (Python strftime)
+  header_date_format: "%Y-%m-%d"
+
+# =============================================================================
+# CATEGORY CONFIGURATION
+# =============================================================================
+categories:
+  breaking:
+    heading: "Breaking Changes"
+    description: "Changes requiring user action"
+    keywords:
+      - "breaking"
+      - "BREAKING CHANGE"
+      - "migrate"
+      - "migration required"
+      - "incompatible"
+      - "removed"
+      - "deprecated and removed"
+    order: 0  # Shown first
+
+  security:
+    heading: "Security Updates"
+    description: "Security patches and vulnerability fixes"
+    keywords:
+      - "security"
+      - "sec:"
+      - "CVE-"
+      - "vulnerability"
+      - "exploit"
+      - "XSS"
+      - "injection"
+      - "authentication bypass"
+      - "authorization"
+      - "CSRF"
+    order: 1  # High priority, shown after breaking
+
+  feature:
+    heading: "New Features"
+    description: "Brand new functionality"
+    keywords:
+      - "feat"
+      - "feature"
+      - "add"
+      - "added"
+      - "new"
+      - "create"
+      - "implement"
+      - "introduce"
+    order: 2
+
+  enhancement:
+    heading: "Enhancements"
+    description: "Improvements to existing features"
+    keywords:
+      - "enhance"
+      - "improvement"
+      - "improve"
+      - "update"
+      - "upgrade"
+      - "optimize"
+      - "better"
+      - "perf"
+      - "performance"
+    order: 3
+
+  bugfix:
+    heading: "Bug Fixes"
+    description: "Issues that were resolved"
+    keywords:
+      - "fix"
+      - "fixed"
+      - "bug"
+      - "issue"
+      - "resolve"
+      - "resolved"
+      - "patch"
+      - "repair"
+      - "correct"
+    order: 4
+
+  change:
+    heading: "Changes"
+    description: "Modifications to existing behavior"
+    keywords:
+      - "change"
+      - "changed"
+      - "modify"
+      - "modified"
+      - "refactor"
+      - "restructure"
+      - "reorganize"
+    order: 5
+
+  dependency:
+    heading: "Dependency Updates"
+    description: "Third-party library and package updates"
+    keywords:
+      - "deps"
+      - "dependency"
+      - "dependencies"
+      - "bump"
+      - "upgrade"
+      - "package"
+    order: 6
+
+  other:
+    heading: "Other Updates"
+    description: "Miscellaneous updates"
+    keywords: []  # Catch-all for unmatched
+    order: 7
+
+# =============================================================================
+# FILTERING SETTINGS
+# =============================================================================
+filters:
+  # Commit message patterns to completely ignore (regex)
+  ignore_commit_patterns:
+    - "^Merge "
+    - "^Merge pull request"
+    - "^Merge branch"
+    - "^WIP"
+    - "^WIP:"
+    - "^fixup!"
+    - "^squash!"
+    - "^Revert \"Revert"
+    - "^Auto-generated"
+
+  # File patterns to ignore in diff analysis (glob)
+  ignore_file_patterns:
+    - "*.lock"
+    - "package-lock.json"
+    - "yarn.lock"
+    - "pnpm-lock.yaml"
+    - "Cargo.lock"
+    - "poetry.lock"
+    - "*.min.js"
+    - "*.min.css"
+    - "*.map"
+    - "*.pyc"
+    - "__pycache__/*"
+    - ".git/*"
+    - "node_modules/*"
+    - "vendor/*"
+    - "dist/*"
+    - "build/*"
+
+  # Categories to exclude from output (e.g., internal changes)
+  exclude_categories: []
+  # Example: exclude_categories: ["other"]
+
+# =============================================================================
+# AI INTERPRETATION SETTINGS
+# =============================================================================
+ai_interpretation:
+  # Enable AI-powered diff interpretation
+  enabled: true
+
+  # Maximum diff size to send to AI (characters)
+  max_diff_size: 5000
+
+  # Maximum number of files to analyze per commit
+  max_files_per_commit: 10
+
+  # Prompt template for AI interpretation
+  prompt_template: |
+    Analyze this code change and describe what it does in ONE sentence.
+
+    Rules:
+    - Write for END USERS, not developers
+    - Do NOT mention: function names, variable names, file paths, class names
+    - Do NOT use technical jargon
+    - Focus on what the USER will experience differently
+    - If purely internal with no user impact, respond with: "Internal improvement"
+    - Keep response under 100 characters
+
+    Commit message: {commit_message}
+    Files changed: {files_changed}
+
+    Diff:
+    ```
+    {diff_content}
+    ```
+
+    User-friendly description:
+
+  # Fallback to pattern matching if AI fails
+  fallback_to_patterns: true
+
+# =============================================================================
+# CONSOLIDATION SETTINGS
+# =============================================================================
+consolidation:
+  # Similarity threshold for merging related changes (0.0 - 1.0)
+  similarity_threshold: 0.7
+
+  # Remove flip-flop changes (changed then changed back = no net change)
+  remove_flipflops: true
+
+  # Merge similar changes into single entries
+  merge_similar: true
+
+  # Maximum changes per category (0 = unlimited)
+  max_per_category: 0
+
+  # Minimum confidence to include (low, medium, high)
+  min_confidence: "low"
+
+# =============================================================================
+# BREAKING CHANGE DETECTION
+# =============================================================================
+breaking_changes:
+  # Keywords in commit messages indicating breaking changes
+  commit_keywords:
+    - "BREAKING"
+    - "BREAKING CHANGE"
+    - "BREAKING-CHANGE"
+    - "breaking:"
+    - "migration required"
+    - "action required"
+    - "manual update required"
+
+  # Conventional commit breaking indicator
+  conventional_breaking_indicator: "!"
+  # Example: feat!: or fix(auth)!:
+
+  # Detect breaking changes from diff patterns
+  detect_from_diff: true
+
+  # Diff patterns indicating breaking changes (regex)
+  diff_patterns:
+    - "DROP TABLE"
+    - "DROP COLUMN"
+    - "DELETE FROM.*WHERE 1=1"
+    - "removed.*export"
+    - "deleted.*public"
+
+# =============================================================================
+# SLACK FORMATTING
+# =============================================================================
+slack:
+  # Maximum items per category in Slack output
+  max_items_per_category: 5
+
+  # Show count of additional items not shown
+  show_overflow_count: true
+
+  # Use Slack markdown formatting
+  use_slack_markdown: true
+
+  # Include version in header
+  include_version_header: true
+
+# =============================================================================
+# CHANGELOG APPEND MODE
+# =============================================================================
+changelog_append:
+  # Default changelog file to append to
+  default_file: "CHANGELOG.md"
+
+  # Create backup before modifying
+  create_backup: true
+
+  # Backup file suffix
+  backup_suffix: ".bak"
+
+  # Header pattern to find insertion point (regex)
+  header_pattern: "^# Changelog"
+
+  # Insert after this pattern (regex) - usually the header or intro
+  insert_after_pattern: "^## \\["
+
+# =============================================================================
+# PREVIEW MODE
+# =============================================================================
+preview:
+  # Enable colors in terminal (disable for basic terminals)
+  use_colors: true
+
+  # Show line numbers for easy reference
+  show_line_numbers: true
+
+  # Items per page in preview
+  items_per_page: 20
+
+  # Confirm before saving
+  confirm_save: true
+
+# =============================================================================
+# GIT SETTINGS
+# =============================================================================
+git:
+  # Default number of commits for "last N" mode
+  default_commit_count: 50
+
+  # Maximum commits to analyze (safety limit)
+  max_commits: 500
+
+  # Timeout for git commands (seconds)
+  command_timeout: 60
+
+  # Include merge commits in analysis
+  include_merge_commits: false
+
+# =============================================================================
+# REMOTE REPOSITORY SETTINGS
+# =============================================================================
+remote:
+  # Auto-detect remote type (github, bitbucket, gitlab)
+  auto_detect: true
+
+  # Generate commit links in output
+  include_commit_links: false
+
+  # Custom URL pattern for commit links
+  # Placeholders: {base_url}, {commit_hash}
+  commit_url_pattern: "{base_url}/commit/{commit_hash}"
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log to file (empty = no file logging)
+  log_file: ""
+
+  # Include timestamps in logs
+  include_timestamps: true
+
+# =============================================================================
+# FILE RELATIONSHIPS (Cross-Reference Detection)
+# =============================================================================
+file_relationships:
+  # Enable semantic grouping of related file changes
+  enabled: true
+
+  # Minimum number of files to trigger grouping
+  min_files_for_grouping: 2
+
+  # Feature areas - files that typically change together
+  areas:
+    authentication:
+      patterns:
+        - "**/auth/**"
+        - "**/login/**"
+        - "**/session/**"
+        - "**/*auth*"
+        - "**/*login*"
+        - "**/*session*"
+        - "**/signin/**"
+        - "**/signup/**"
+      consolidation_phrase: "authentication"
+      priority: 1
+
+    user_interface:
+      patterns:
+        - "**/*.tsx"
+        - "**/*.jsx"
+        - "**/*.vue"
+        - "**/*.svelte"
+        - "**/*.css"
+        - "**/*.scss"
+        - "**/*.less"
+        - "**/components/**"
+        - "**/pages/**"
+        - "**/views/**"
+        - "**/ui/**"
+        - "**/frontend/**"
+      consolidation_phrase: "user interface"
+      priority: 2
+
+    api_endpoints:
+      patterns:
+        - "**/routes/**"
+        - "**/api/**"
+        - "**/controllers/**"
+        - "**/handlers/**"
+        - "**/endpoints/**"
+        - "**/*route*"
+        - "**/*controller*"
+        - "**/*handler*"
+      consolidation_phrase: "API"
+      priority: 1
+
+    database:
+      patterns:
+        - "**/models/**"
+        - "**/migrations/**"
+        - "**/schema/**"
+        - "**/*repository*"
+        - "**/*model*"
+        - "**/*entity*"
+        - "**/*.sql"
+        - "**/db/**"
+      consolidation_phrase: "data handling"
+      priority: 1
+
+    configuration:
+      patterns:
+        - "**/*.yaml"
+        - "**/*.yml"
+        - "**/*.json"
+        - "**/*.toml"
+        - "**/*.ini"
+        - "**/.env*"
+        - "**/config/**"
+        - "**/*config*"
+        - "**/*settings*"
+      consolidation_phrase: "configuration"
+      priority: 3
+
+    testing:
+      patterns:
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/spec/**"
+        - "**/*test*"
+        - "**/*spec*"
+        - "**/__tests__/**"
+      consolidation_phrase: "testing"
+      priority: 4
+
+    documentation:
+      patterns:
+        - "**/*.md"
+        - "**/*.rst"
+        - "**/*.txt"
+        - "**/docs/**"
+        - "**/documentation/**"
+        - "**/README*"
+        - "**/CHANGELOG*"
+      consolidation_phrase: "documentation"
+      priority: 5
+
+  # Feature indicators - when multiple areas change together
+  feature_indicators:
+    - min_areas: 3
+      category: "feature"
+      template: "Added new {primary} feature"
+    - min_areas: 2
+      category: "enhancement"
+      template: "Improved {primary}"
