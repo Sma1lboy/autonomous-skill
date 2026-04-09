@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import shutil
 import subprocess
 import sys
@@ -77,10 +78,10 @@ def main(argv: list[str]) -> int:
     )
     phase = result.stdout.strip().splitlines()[-1] if result.stdout else "unknown"
 
-    print(f"STATUS={status}")
-    print(f"SUMMARY={summary}")
+    print(f"STATUS={shlex.quote(status)}")
+    print(f"SUMMARY={shlex.quote(summary)}")
     print(f"DIR_COMPLETE={'true' if direction_complete else 'false'}")
-    print(f"PHASE={phase}")
+    print(f"PHASE={shlex.quote(phase)}")
     print(f"Phase after sprint {args.sprint_num}: {phase}", file=sys.stderr)
     return 0
 

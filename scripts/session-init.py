@@ -7,10 +7,14 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 
-def run(cmd: list[str], cwd: Path, *, check: bool = True) -> None:
-    subprocess.run(cmd, cwd=cwd, check=check)
+def run(cmd: list[str], cwd: Path, *, check: bool = True, quiet: bool = False) -> None:
+    kwargs: dict[str, Any] = {"cwd": cwd, "check": check}
+    if quiet:
+        kwargs["stdout"] = subprocess.DEVNULL
+    subprocess.run(cmd, **kwargs)
 
 
 def main(argv: list[str]) -> int:
@@ -48,13 +52,15 @@ def main(argv: list[str]) -> int:
             str(args.max_sprints),
         ],
         cwd=project_dir,
+        quiet=True,
     )
 
-    run([sys.executable, str(backlog), "init", str(project_dir)], cwd=project_dir)
+    run([sys.executable, str(backlog), "init", str(project_dir)], cwd=project_dir, quiet=True)
     run(
         [sys.executable, str(backlog), "prune", str(project_dir), "30"],
         cwd=project_dir,
         check=False,
+        quiet=True,
     )
 
     print(f"SESSION_BRANCH={session_branch}")

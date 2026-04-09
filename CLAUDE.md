@@ -47,6 +47,7 @@ Conductor (SKILL.md, user's CC session)
 - `.claude/skills/clean-gstack/SKILL.md` — Delete gstack design doc archives
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
+- `.claude/skills/smoke-test/SKILL.md` — Quick e2e pipeline smoke test (Conductor→Master→Worker→done)
 - `OWNER.md.template` — Template for manual persona configuration
 - `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
@@ -146,7 +147,7 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 
 ## Testing
 
-294 tests across 6 suites, all pure bash:
+329 tests across 7 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
@@ -156,6 +157,7 @@ bash tests/test_explore_scan.sh # 45 tests: 8-dimension scoring heuristics, edge
 bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, persona, error handling, CLI help
 bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
 bash tests/test_build_sprint_prompt.sh  # 25 tests: template resolution, allow/block injection, fallback, path-traversal guard
+bash tests/test_eval_output.sh  # 35 tests: eval-safe output, shell quoting, tmux cleanup
 python3 -m compileall scripts   # quick syntax check
 ```
 

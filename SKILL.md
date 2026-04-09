@@ -99,6 +99,30 @@ python3 "$SCRIPT_DIR/scripts/backlog.py" update "$(pwd)" "<item-id>" priority 2
 **If phase is "directed":**
 - Break the user's mission into the next logical step
 - Consider what previous sprints accomplished (read previous sprint summaries)
+
+  **Sprint granularity — be conservative.** Each sprint takes significant time
+  (~5-15 minutes of dispatch, monitoring, comms rounds). Do NOT split work into
+  many small sprints. A sprint should be a **complete deliverable unit**:
+
+  - A full page or feature built end-to-end
+  - A complete stage of a larger task (e.g., "rewrite all scripts to Python")
+  - A full test suite for a subsystem
+  - A complete refactor of one module
+
+  **Sizing rules:**
+  - Default to FEWER, LARGER sprints. When in doubt, combine into one sprint.
+  - If a task can be done in a single sprint, use one sprint — don't split it.
+  - Only split when scope genuinely exceeds what one worker session can handle
+    (roughly: 10+ files changed, or 2+ unrelated subsystems).
+  - Tests for a feature belong in the SAME sprint as the feature, not a separate one.
+  - Never create a sprint for a trivial subtask (renaming, formatting, a single fix).
+
+  **Examples — "rewrite 17 bash scripts to Python":**
+  - GOOD: 1 sprint — "Rewrite all bash scripts to Python, update tests and docs"
+  - GOOD: 2 sprints — "Rewrite all scripts to Python" + "Update tests for new Python scripts"
+  - BAD: 17 sprints, one per script file
+  - BAD: 5 sprints splitting scripts by arbitrary groups
+
 - Give a concrete, focused direction for this sprint — **ONE sentence, max TWO**.
   The direction is a WHAT, not a HOW. Examples:
   - GOOD: "Redesign all pages to match sma1lboy.me minimal style"
