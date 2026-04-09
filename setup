@@ -30,9 +30,13 @@ done
 
 # ─── Public skills to register ────────────────────────────────
 # Each entry: <directory-in-repo> <skill-name>
+# Each entry: <directory-in-repo>:<registered-skill-name>
+# Multiple entries can point to the same directory (aliases)
 SKILLS=(
   "autonomous:autonomous"
+  "autonomous:auto"
   "quickdo:quickdo"
+  "quickdo:qd"
 )
 
 # ─── Uninstall ────────────────────────────────────────────────
