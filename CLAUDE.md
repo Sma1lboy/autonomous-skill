@@ -23,7 +23,7 @@ Conductor (SKILL.md, user's CC session)
 
 ### Key Files
 
-- `SKILL.md` — Conductor: multi-sprint orchestrator, phase management, exploration strategy
+- `autonomous/SKILL.md` — Conductor: multi-sprint orchestrator, phase management, exploration strategy
 - `SPRINT.md` — Sprint master: per-sprint execution (Sense->Direct->Respond->Summarize)
 - `scripts/startup.py` — SCRIPT_DIR resolution + project context (shared by all layers)
 - `scripts/parse-args.py` — Parse ARGS → _MAX_SPRINTS + _DIRECTION
@@ -48,7 +48,7 @@ Conductor (SKILL.md, user's CC session)
 - `.claude/skills/capture-worker/SKILL.md` — Capture worker JSONL for inspection
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
 - `.claude/skills/smoke-test/SKILL.md` — Quick e2e pipeline smoke test (Conductor→Master→Worker→done)
-- `.claude/skills/quickdo/SKILL.md` — Fast single-sprint mode: skip conductor, blocking claude -p
+- `quickdo/SKILL.md` — Fast single-sprint mode: skip conductor, blocking claude -p
 - `OWNER.md.template` — Template for manual persona configuration
 - `tests/test_helpers.sh` — Shared test framework (assertions, temp dirs, result summary)
 - `.claude/skills/diff-sessions/SKILL.md` — Compare two worker sessions side-by-side
