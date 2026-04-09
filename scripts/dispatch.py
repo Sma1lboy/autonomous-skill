@@ -52,7 +52,14 @@ def main(argv: list[str]) -> int:
 
     wrapper = create_wrapper(project, prompt, args.window_name)
 
-    if tmux_available():
+    env_mode = os.environ.get("DISPATCH_MODE", "").lower()
+
+    if env_mode == "blocking":
+        print("DISPATCH_MODE=blocking")
+        print(f"Running '{args.window_name}' (blocking)...")
+        result = subprocess.run(["bash", str(wrapper)], check=False)
+        print(f"Finished with exit code {result.returncode}")
+    elif tmux_available() and env_mode != "headless":
         subprocess.run(
             ["tmux", "new-window", "-n", args.window_name, f"bash {wrapper}"],
             check=False,
