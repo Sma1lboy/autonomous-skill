@@ -135,13 +135,19 @@ LOOP_DIR="$RALPH_DIR/$LOOP_NAME"
 mkdir -p "$LOOP_DIR"
 ```
 
-Write `$LOOP_DIR/SKILL.md` following this template:
+Write `$LOOP_DIR/SKILL.md`. Generated loop skills are **NOT user-invocable** — they
+are auto-triggered by the system when the description's trigger conditions match
+the user's conversation context. This is the key design: the user never has to
+remember to invoke the loop, it activates automatically when they're doing the
+same kind of work again.
+
+Follow this template exactly:
 
 ````markdown
 ---
 name: <loop-name>
-description: "<one-line: what this loop does, derived from the conversation pattern>"
-user-invocable: true
+description: "<trigger condition: describe WHEN this skill should activate — what kind of work, what project context, what files/commands the user is touching. Be specific enough that the system can match it accurately.>"
+user-invocable: false
 ---
 
 # <Loop Title>
@@ -149,9 +155,6 @@ user-invocable: true
 <What workflow this automates — written from the actual conversation pattern.>
 
 ## Execute
-
-If the user provided ARGS, use them as the task context.
-Otherwise, the loop runs as a standalone verification pass.
 
 Use the Skill tool to invoke quickdo:
 
@@ -170,8 +173,8 @@ args: "<canned direction that encodes all phases, commands, fix strategies,
 ````markdown
 ---
 name: rust-build-test-clippy
-description: "Ralph Loop: cargo build → cargo test → cargo clippy, fixing errors at each phase until clean."
-user-invocable: true
+description: "TRIGGER when: user is developing in a Rust project (Cargo.toml present) and has written or modified .rs files. Runs cargo build → cargo test → cargo clippy verification chain with iterative error fixing."
+user-invocable: false
 ---
 
 # Rust Build-Test-Clippy Loop
@@ -181,14 +184,11 @@ Fixes errors iteratively at each phase before moving to the next.
 
 ## Execute
 
-If the user provided ARGS (e.g., "add pagination to the list endpoint"),
-prepend it as the task. Otherwise, run as a verification-only pass.
-
 Use the Skill tool to invoke quickdo:
 
 ```
 skill: "quickdo"
-args: "<user task if any>. Then run the Ralph Loop verification chain:
+args: "Run the Ralph Loop verification chain on the current changes:
 Phase 1 — Build: run `cargo build`. If it fails, read the compiler errors,
 fix the source code (imports, types, lifetimes), and re-run. Max 3 retries.
 Phase 2 — Test: run `cargo test`. If any test fails, read the failure output,
@@ -201,18 +201,22 @@ When all 3 phases pass, report what was fixed and total iterations per phase."
 
 ## Register
 
-After generating, register the new loop skill:
+After writing the SKILL.md to `$RALPH_DIR/<loop-name>/SKILL.md`, register it
+so the system can find and auto-trigger it:
 
 ```bash
 bash "$SCRIPT_DIR/scripts/register-ralph-loops.sh"
 ```
 
+This symlinks `$RALPH_DIR/<loop-name>/SKILL.md` → `~/.claude/skills/<loop-name>/SKILL.md`.
+
 Report to the user:
-- The loop has been captured as `/<loop-name>`
-- It was extracted from this conversation's pattern
-- It runs via `/quickdo` — auto-branching, worker isolation, sprint summary included
-- They can invoke it with `/<loop-name>` or `/<loop-name> <task description>`
-- They can edit it at: `<LOOP_DIR>/SKILL.md`
+- The loop has been captured as `<loop-name>`
+- Saved at: `$RALPH_DIR/<loop-name>/SKILL.md`
+- Registered at: `~/.claude/skills/<loop-name>/SKILL.md`
+- It is **not user-invocable** — it auto-triggers when the system detects matching context
+- It runs via `/quickdo` when triggered
+- They can edit it at: `$RALPH_DIR/<loop-name>/SKILL.md`
 - To see all loops: `/explore-ralph-loop list`
 - To delete: `/explore-ralph-loop delete <name>`
 
