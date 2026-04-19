@@ -92,6 +92,30 @@ a test suite, a refactor.
 AUTONOMOUS_DIRECTION="fix auth bugs" python3 scripts/loop.py /path/to/project
 ```
 
+### Mid-session intercepts
+
+Once a session is running, any external terminal can queue directives or pause
+requests that the conductor picks up between sprints:
+
+```bash
+cd /path/to/project
+
+# Redirect the next sprint
+python3 ~/.claude/skills/autonomous-skill/scripts/intercept.py add . \
+  "use Lucia for auth, not NextAuth"
+
+# Stop and hand control back to you on the next sprint boundary
+python3 ~/.claude/skills/autonomous-skill/scripts/intercept.py pause . \
+  "I want to review the direction"
+
+# Peek at the queue / clear it
+python3 ~/.claude/skills/autonomous-skill/scripts/intercept.py status .
+python3 ~/.claude/skills/autonomous-skill/scripts/intercept.py clear .
+```
+
+Intercepts take effect on the next Plan step — worst-case latency is the
+remaining runtime of the current sprint (≤ `CC_TIMEOUT`, default 15 minutes).
+
 ---
 
 ## Architecture

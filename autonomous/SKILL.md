@@ -98,6 +98,32 @@ BACKLOG_FULL=$(python3 "$SCRIPT_DIR/scripts/backlog.py" list "$(pwd)" open 2>/de
 BACKLOG_STATS=$(python3 "$SCRIPT_DIR/scripts/backlog.py" stats "$(pwd)" 2>/dev/null || echo "")
 ```
 
+**Between sprints — User intercepts:** Check whether the user (or any external
+actor) has queued intercepts since the last sprint. This is how the user
+steers the session mid-flight from another terminal:
+
+```bash
+INTERCEPT_STATUS=$(python3 "$SCRIPT_DIR/scripts/intercept.py" status "$(pwd)")
+if [ "$INTERCEPT_STATUS" != "none" ]; then
+  NEXT_SPRINT=$(python3 -c "import json; d=json.load(open('.autonomous/conductor-state.json')); print(len(d.get('sprints', []))+1)")
+  INTERCEPT_ITEMS=$(python3 "$SCRIPT_DIR/scripts/intercept.py" consume "$(pwd)" "$NEXT_SPRINT")
+  echo "$INTERCEPT_ITEMS"
+fi
+```
+
+Handle each consumed item:
+- **`type: "pause"`**: Print the note to the user, then use AskUserQuestion to
+  ask what they want to do (resume as planned / change direction / stop the
+  session). Do NOT dispatch the next sprint until the user answers.
+- **`type: "directive"`**: Surface the directive text verbatim ("Intercept
+  received: \"<directive>\"") and fold it into the next sprint direction.
+  If multiple directives, merge them into one coherent direction; if they
+  conflict, ask the user which takes precedence.
+
+Intercepts always take precedence over the originally planned direction.
+`consume` atomically marks items as processed, so running the check twice
+in one sprint is safe — the second call returns `[]`.
+
 **Between sprints — Backlog triage:** If new worker-sourced items appeared
 (check `BACKLOG_STATS` for `untriaged` count), review them:
 ```bash

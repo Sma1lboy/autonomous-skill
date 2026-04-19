@@ -2,6 +2,16 @@
 
 All notable changes to autonomous-skill are documented here.
 
+## [Unreleased]
+
+### Added
+- `scripts/intercept.py` — mid-session intercept queue. External terminals can run `intercept.py add <project> "directive"` or `intercept.py pause <project>` to steer a running session. Conductor consumes between sprints via `status` + `consume`.
+- `tests/test_intercept.sh` — 50 tests covering add/pause/consume/clear, session scoping, concurrency, corruption resilience, and input validation.
+- README section "Mid-session intercepts" documenting the external CLI workflow.
+
+### Changed
+- `autonomous/SKILL.md` Plan phase reads `intercept.py status`/`consume` alongside backlog state; pause items stop the loop for user input, directive items fold into the next sprint direction.
+
 ## [0.6.0] — 2026-04-09
 
 ### Added
