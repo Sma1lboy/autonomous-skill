@@ -22,3 +22,6 @@ ralph-loop-skills/
 
 # Runtime state (per-session, never committed)
 .autonomous/
+
+# Local VS Code workspace settings (testing scaffolding, not for distribution)
+/.vscode/
