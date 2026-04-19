@@ -30,7 +30,8 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/parse-args.py` — Parse ARGS → _MAX_SPRINTS + _DIRECTION
 - `scripts/session-init.py` — Create session branch, init conductor state + backlog
 - `scripts/build-sprint-prompt.py` — Inline SPRINT.md + params → sprint-prompt.md
-- `scripts/dispatch.py` — tmux/headless session dispatch
+- `scripts/dispatch.py` — tmux/headless session dispatch; optionally deploys careful hook when `AUTONOMOUS_WORKER_CAREFUL=1`
+- `scripts/hooks/careful.sh` — PreToolUse Bash hook; blocks catastrophic patterns (rm -rf /, mkfs, force-push to main, DROP TABLE, fork bombs)
 - `scripts/monitor-sprint.py` — Poll for sprint-summary.json
 - `scripts/monitor-worker.py` — Poll comms.json + tmux/process liveness
 - `scripts/evaluate-sprint.py` — Read summary JSON, update conductor state
@@ -153,7 +154,7 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 
 ## Testing
 
-410 tests across 9 suites, all pure bash:
+515 tests across 10 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
@@ -164,7 +165,8 @@ bash tests/test_loop.sh         # 20 tests: standalone launcher args, env vars, 
 bash tests/test_backlog.sh      # 76 tests: CRUD, progressive disclosure, pick, prune, overflow, concurrency, validation
 bash tests/test_build_sprint_prompt.sh  # 25 tests: template resolution, allow/block injection, fallback, path-traversal guard
 bash tests/test_eval_output.sh  # 35 tests: eval-safe output, shell quoting, tmux cleanup
-bash tests/test_timeline.sh     # 55 tests: append-only JSONL log, filters, conductor integration, phase-transition emission
+bash tests/test_timeline.sh     # 63 tests: append-only JSONL log, filters, conductor integration, phase-transition emission, non-raising emit, bounded tail
+bash tests/test_careful_hook.sh # 97 tests: PreToolUse hook pattern matching, adversarial bypasses, dispatch integration, window_name validation
 python3 -m compileall scripts   # quick syntax check
 ```
 

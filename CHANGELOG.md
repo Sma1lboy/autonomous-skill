@@ -5,13 +5,11 @@ All notable changes to autonomous-skill are documented here.
 ## [Unreleased]
 
 ### Added
-- `scripts/timeline.py` — append-only JSONL event log at `.autonomous/timeline.jsonl`. Records session-start / sprint-start / sprint-end / phase-transition / session-end events across all sessions in a project. Enables post-hoc inspection and future analytics.
-- Commands: `emit`, `tail`, `list --session X --event Y`, `sessions`.
-- `tests/test_timeline.sh` — 55 tests covering emit, filters, malformed-line resilience, conductor integration, phase-transition emission.
+- `scripts/hooks/careful.sh` — PreToolUse Bash hook for autonomous workers. Blocks catastrophic patterns (rm -rf /, rm -rf $HOME/~, /Users, /home, dd to raw device, mkfs, fork bomb, device redirects, shutdown/reboot/halt, git force-push, DROP TABLE/DATABASE/SCHEMA, TRUNCATE). Covers first-word bypass (`echo ok; rm -rf /`, `env rm -rf /`) by running all destructive checks regardless of the leading command.
+- `tests/test_careful_hook.sh` — 97 tests covering safe commands, catastrophic patterns, build-artifact exceptions, SQL, force-push, fork bomb, non-Bash input, adversarial bypass attempts (chaining, wrapper execs, flag separators), and dispatch integration.
 
 ### Changed
-- `conductor-state.py` emits timeline events on `init` (session-start), `sprint-start`, and `sprint-end` (plus `phase-transition` on phase change). Failures are swallowed so a broken timeline never breaks the conductor.
-- `autonomous/SKILL.md` Session Wrap-up emits `session-end` with total_sprints / total_commits.
+- `scripts/dispatch.py` — when `AUTONOMOUS_WORKER_CAREFUL=1` (or `true`/`yes`), writes a per-session `.autonomous/settings-<window>.json` registering the careful hook and passes `--settings <path>` to the worker's `claude` invocation. `window_name` validated against `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$` to block path-traversal and shell injection. Wrapper uses `shlex.quote()` for all interpolated paths. Opt-in; default remains off.
 
 ## [0.6.0] — 2026-04-09
 

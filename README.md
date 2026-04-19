@@ -184,6 +184,20 @@ The sprint master polls, decides using product intuition (or OWNER.md guidance),
 
 Valid statuses: `idle`, `waiting`, `answered`, `done`.
 
+### Worker safety hook (opt-in)
+
+Set `AUTONOMOUS_WORKER_CAREFUL=1` to install a PreToolUse hook on every dispatched worker that blocks catastrophic Bash commands:
+
+```bash
+AUTONOMOUS_WORKER_CAREFUL=1 /autonomous 5 build REST API
+```
+
+Blocks: `rm -rf /`, `rm -rf $HOME`, `rm -rf /Users|/home`, `mkfs`, `dd of=/dev/sd*`, fork bombs, device redirects, `shutdown`/`reboot`, `git push --force` to `main`/`master`/`trunk`/`release`, `DROP TABLE/DATABASE/SCHEMA`, `TRUNCATE TABLE`.
+
+Search/view tools (`grep DROP foo.sql`, `echo rm -rf /`) are recognized by first-word whitelist and allowed. Ordinary `rm -rf node_modules` and similar build-artifact cleanup pass through.
+
+Configured per-sprint via `claude --settings <file>` — no global settings change. Blocks are exit-2 with a stderr message; the worker reads "BLOCKED: ..." and adapts.
+
 
 ## Configuration
 
