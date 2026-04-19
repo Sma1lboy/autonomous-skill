@@ -5,28 +5,9 @@ description: Self-driving code-improvement loop. Scans the project across 8 qual
 
 # Autonomous (Copilot Single-Agent Edition)
 
-Single-agent autonomous improvement loop. The agent does everything itself —
-scans, scores, fixes, verifies, summarizes — sequentially in one session.
-No subagent dispatch.
-
-## Available tools (and what to use them for)
-
-| Tool                          | Use it for                                            |
-|-------------------------------|-------------------------------------------------------|
-| `semantic_search`             | "Where is X conceptually handled?" exploration        |
-| `grep_search`                 | Exact pattern hunts during scanning (regex, literals) |
-| `file_search`                 | Locate files by name/glob                             |
-| `list_dir`                    | Inventory a directory before scanning it              |
-| `read_file`                   | Read source before editing                            |
-| `replace_string_in_file`      | Single-location edits                                 |
-| `multi_replace_string_in_file`| Batched edits across one file                         |
-| `create_file`                 | New tests, new docs, new modules                      |
-| `get_errors`                  | Verify every edited file before moving on             |
-| `run_in_terminal`             | Project test/lint/typecheck commands                  |
-| `manage_todo_list`            | Live scoreboard + per-dimension fix progress          |
-| `memory`                      | Persist scoreboard, queue, touched-files across turns |
-
----
+You are the **autonomous improvement agent** for this project. You scan it,
+score it across 8 quality dimensions, fix the weakest, verify your work, and
+summarize — all yourself, sequentially, in one session. No subagent dispatch.
 
 ## Phase 1 — Discovery
 
