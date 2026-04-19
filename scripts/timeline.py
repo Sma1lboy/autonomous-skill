@@ -5,9 +5,13 @@ Writes JSONL events to .autonomous/timeline.jsonl across sessions. Used for
 post-hoc inspection ("what happened in session X?"), future analytics, and
 debugging phase transitions or sprint failures.
 
-Append-only. Never truncates. POSIX O_APPEND makes short writes atomic, so
-no lock is needed (events stay well under PIPE_BUF). Failures during emit
-are swallowed so a broken timeline never breaks the conductor.
+Append-only; never truncates. Writes use O_APPEND; individual writes smaller
+than the OS page size are generally seen as atomic by concurrent readers on
+local filesystems (no guarantee on NFS). This is best-effort logging — if
+interleaved or partially-written lines appear, `iter_events()` skips the
+malformed entries. The API is deliberately non-raising: `emit()` always
+returns a bool, never raises `SystemExit` or propagates errors, so conductor
+integrations cannot be killed by a bad event name or a full disk.
 """
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ import json
 import os
 import sys
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -60,31 +65,33 @@ def emit(
     session_id: str | None = None,
     **fields: Any,
 ) -> bool:
-    """Append a single event line. Returns True on success, False if silently
-    swallowed (disk full, permission denied, etc.)."""
-    if event not in VALID_EVENTS:
-        die(f"Unknown event: {event} (valid: {', '.join(sorted(VALID_EVENTS))})")
+    """Append a single event line. Returns True on success, False on any
+    error (unknown event, OS error, encoding failure, etc.). Never raises.
 
-    state_dir = project_dir / ".autonomous"
-    try:
-        state_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
+    The conductor relies on this contract: an unknown event name is a bug we
+    want to notice in tests, not a crash that kills an in-flight sprint.
+    The CLI path (`cmd_emit`) still validates loudly via `die()`.
+    """
+    if event not in VALID_EVENTS:
         return False
 
-    record: dict[str, Any] = {
-        "ts": now_iso(),
-        "session_id": session_id if session_id is not None else read_session_id(project_dir),
-        "event": event,
-    }
-    record.update(fields)
-
-    line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
-    path = timeline_path(project_dir)
     try:
+        state_dir = project_dir / ".autonomous"
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        record: dict[str, Any] = {
+            "ts": now_iso(),
+            "session_id": session_id if session_id is not None else read_session_id(project_dir),
+            "event": event,
+        }
+        record.update(fields)
+
+        line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+        path = timeline_path(project_dir)
         with open(path, "a", encoding="utf-8") as handle:
             handle.write(line)
         return True
-    except OSError:
+    except (OSError, TypeError, ValueError):
         return False
 
 
@@ -109,6 +116,8 @@ def cmd_emit(project: Path, args: list[str]) -> None:
     if not args:
         die("Usage: timeline.py emit <project-dir> <event> [key=value ...]")
     event = args[0]
+    if event not in VALID_EVENTS:
+        die(f"Unknown event: {event} (valid: {', '.join(sorted(VALID_EVENTS))})")
     extras = parse_kv_args(args[1:])
     ok = emit(project, event, **extras)
     print("ok" if ok else "silent-fail")
@@ -141,8 +150,11 @@ def cmd_tail(project: Path, args: list[str]) -> None:
     if n <= 0:
         die(f"N must be positive, got: {n}")
 
-    events = list(iter_events(project))
-    for record in events[-n:]:
+    # Bounded memory: keep only the last N events, not the whole log.
+    last_n: deque[dict[str, Any]] = deque(maxlen=n)
+    for record in iter_events(project):
+        last_n.append(record)
+    for record in last_n:
         print(json.dumps(record, ensure_ascii=False, separators=(",", ":")))
 
 

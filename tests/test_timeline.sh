@@ -269,15 +269,11 @@ echo "10. Failure resilience"
 # Read-only .autonomous dir — emit silently fails but doesn't crash
 T=$(new_tmp)
 mkdir -p "$T/.autonomous"
-# Pre-create the file, then make parent immutable? On macOS we can test with
-# a non-existent parent volume instead.
-# Simpler: verify that emit never raises from the Python API
 python3 -c "
 import sys
 sys.path.insert(0, '$SCRIPT_DIR/../scripts')
 import timeline
 from pathlib import Path
-# Should not raise even with unusual inputs
 ok = timeline.emit(Path('$T'), 'note', content='hello')
 print('api-ok' if ok else 'api-silent-fail')
 " > /tmp/timeline-api-test.out
@@ -292,5 +288,98 @@ printf '%s\n' '{"valid":1}' '{not json}' '{"valid":2}' > "$T/.autonomous/timelin
 TAIL=$(python3 "$TIMELINE" tail "$T")
 assert_contains "$TAIL" '"valid":1' "malformed line skipped, first valid survives"
 assert_contains "$TAIL" '"valid":2' "malformed line skipped, last valid survives"
+
+# ── 11. Python API never raises (regression for SystemExit leak) ──────────
+
+echo ""
+echo "11. Python API safety (emit never raises)"
+
+T=$(new_tmp)
+# Unknown event via direct import must return False, not raise SystemExit.
+# Regression guard for Codex finding: conductor's `_emit` caught Exception
+# but SystemExit bypasses that, so a typo'd event name would kill the conductor.
+python3 -c "
+import sys
+sys.path.insert(0, '$SCRIPT_DIR/../scripts')
+import timeline
+from pathlib import Path
+try:
+    ok = timeline.emit(Path('$T'), 'not-a-real-event')
+    print('returned:', ok)
+except BaseException as e:
+    print('raised:', type(e).__name__, e)
+    sys.exit(7)
+" > /tmp/timeline-api-unknown.out
+RESULT=$(cat /tmp/timeline-api-unknown.out)
+assert_contains "$RESULT" "returned: False" "emit() returns False on unknown event (does not raise)"
+rm -f /tmp/timeline-api-unknown.out
+
+# Simulate the conductor's _emit() wrapper (Exception catch, not BaseException)
+python3 -c "
+import sys
+sys.path.insert(0, '$SCRIPT_DIR/../scripts')
+import timeline
+from pathlib import Path
+def _emit(proj, ev, **f):
+    try:
+        return timeline.emit(proj, ev, **f)
+    except Exception:
+        return None
+r = _emit(Path('$T'), 'bogus-event-name')
+print('conductor-safe:', r is False)
+" > /tmp/timeline-api-conductor.out
+RESULT=$(cat /tmp/timeline-api-conductor.out)
+assert_contains "$RESULT" "conductor-safe: True" "conductor _emit() pattern survives unknown event"
+rm -f /tmp/timeline-api-conductor.out
+
+# Unserializable extra field returns False (doesn't raise TypeError)
+python3 -c "
+import sys
+sys.path.insert(0, '$SCRIPT_DIR/../scripts')
+import timeline
+from pathlib import Path
+
+class NotSerializable:
+    pass
+
+ok = timeline.emit(Path('$T'), 'session-start', bad=NotSerializable())
+print('unserializable:', ok)
+" > /tmp/timeline-unserial.out
+RESULT=$(cat /tmp/timeline-unserial.out)
+assert_contains "$RESULT" "unserializable: False" "emit() returns False on unserializable field"
+rm -f /tmp/timeline-unserial.out
+
+# CLI path still validates loudly (unknown event → exit non-zero)
+T=$(new_tmp)
+if python3 "$TIMELINE" emit "$T" "bogus-event" 2>/dev/null; then
+  fail "CLI emit with unknown event should exit non-zero"
+else
+  ok "CLI emit rejects unknown event"
+fi
+
+# ── 12. Bounded memory on tail (regression for O(N) list load) ────────────
+
+echo ""
+echo "12. Bounded tail memory"
+
+T=$(new_tmp)
+mkdir -p "$T/.autonomous"
+python3 -c "
+import json
+with open('$T/.autonomous/timeline.jsonl', 'w') as f:
+    for i in range(5000):
+        f.write(json.dumps({'event':'sprint-end','sprint':i,'session_id':'x','ts':'2026-04-19T00:00:00Z'}) + '\n')
+"
+TAIL=$(python3 "$TIMELINE" tail "$T" 3)
+LINE_COUNT=$(echo "$TAIL" | wc -l | tr -d ' ')
+assert_eq "$LINE_COUNT" "3" "tail 3 works on 5000-event file"
+assert_contains "$TAIL" '"sprint":4999' "last event surfaces in tail"
+assert_contains "$TAIL" '"sprint":4997' "third-to-last included"
+# First event must NOT be in tail 3 of a 5000-event file
+if echo "$TAIL" | grep -qE '"sprint":0[,}]'; then
+  fail "tail 3 unexpectedly includes sprint 0"
+else
+  ok "early events excluded (deque bound works)"
+fi
 
 print_results
