@@ -29,9 +29,11 @@ Copilot auto-discovers it across every workspace. Nothing to commit.
 
 ### Option 2 — Project-local (commit + share with team)
 
+From your project root:
+
 ```bash
-mkdir -p <your-project>/.github/skills
-cp -r copilot/skills/autonomous-copilot <your-project>/.github/skills/
+mkdir -p .github/skills
+cp -r /path/to/autonomous-skill/copilot/skills/autonomous-copilot .github/skills/
 ```
 
 Commit the `.github/skills/autonomous-copilot/` folder. Anyone on the team who

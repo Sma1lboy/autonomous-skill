@@ -55,7 +55,9 @@ For each dimension:
 3. Assign a 0-10 integer. Be honest. Inflated scores defeat the loop.
 4. Append to the `manage_todo_list` scoreboard:
    `[test_coverage] 3/10 — only 2 test files for 47 source files, no CI runner`
-5. Save to `memory` under key `scoreboard` as `{dimension: {score, evidence}}`.
+5. Save to `memory` under key `scoreboard` as `{dimension: {before, evidence}}`.
+   Use the field name `before` (not `score`) so Phase 3 can append `.after`
+   without clobbering the baseline.
 
 After all eight are scored, print the scoreboard.
 
@@ -71,9 +73,11 @@ while any dimension scores < 7:
     edit
     get_errors(file)            # halt this dimension if errors appear and aren't fixable in-place
   run project test/lint command  # if one exists
+  before    = memory[scoreboard][<dimension>].before
   rescore   = honest 0-10 after the fix
-  print     `[<dimension>] <before> → <after> ✓ (<one-line summary>)`
-  memory.update(scoreboard[<dimension>] = rescore, files_touched[<dimension>] = files)
+  print     `[<dimension>] <before> → <rescore> ✓ (<one-line summary>)`
+  memory.update(scoreboard[<dimension>].after = rescore,
+                scoreboard[<dimension>].files = files)
   if rescore <= before:
     consecutive_no_improvement += 1
   else:
