@@ -36,6 +36,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/monitor-worker.py` — Poll comms.json + tmux/process liveness
 - `scripts/evaluate-sprint.py` — Read summary JSON, update conductor state
 - `scripts/merge-sprint.py` — Merge or discard sprint branch
+- `scripts/worktree.py` — Per-sprint git worktree manager (opt-in via `AUTONOMOUS_SPRINT_WORKTREES=1`): creates `.worktrees/sprint-N/` with symlinked `.autonomous/`, removes on success
 - `scripts/write-summary.py` — Generate sprint-summary.json
 - `scripts/conductor-state.py` — Conductor state management (atomic writes, PID lock, phase transitions; emits timeline events)
 - `scripts/timeline.py` — Append-only JSONL session event log at `.autonomous/timeline.jsonl` (session-start, sprint-start, sprint-end, phase-transition, session-end)
@@ -155,7 +156,7 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 
 ## Testing
 
-585 tests across 11 suites, all pure bash:
+650 tests across 12 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
@@ -169,6 +170,7 @@ bash tests/test_eval_output.sh  # 35 tests: eval-safe output, shell quoting, tmu
 bash tests/test_timeline.sh     # 63 tests: append-only JSONL log, filters, conductor integration, phase-transition emission, non-raising emit, bounded tail
 bash tests/test_careful_hook.sh # 97 tests: PreToolUse hook pattern matching, adversarial bypasses, dispatch integration, window_name validation
 bash tests/test_checkpoint.sh   # 70 tests: save/list/latest/show, path-traversal rejection, YAML injection resistance, type-unsafe JSON, non-UTF8
+bash tests/test_worktree.sh     # 65 tests: per-sprint worktree CRUD, symlink escape refusal, branch validation, registered-worktree guard, merge-sprint --keep-branch
 python3 -m compileall scripts   # quick syntax check
 ```
 

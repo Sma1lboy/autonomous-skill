@@ -5,8 +5,12 @@ All notable changes to autonomous-skill are documented here.
 ## [Unreleased]
 
 ### Added
-- `scripts/checkpoint.py` — human-readable session snapshots. `save`/`list`/`latest`/`show` commands write markdown files (with YAML frontmatter) to `.autonomous/checkpoints/<ts>-<slug>.md`. Captures mission, phase, sprint history, exploration dimensions, backlog summary, git state, and resume guidance. Rejects path-traversal and glob-injection in `show`; all YAML scalars are JSON-quoted to resist frontmatter injection; `read_json` enforces dict shape.
-- `tests/test_checkpoint.sh` — 70 tests covering save/list/latest/show flows, same-second collision handling, path-traversal rejection, YAML injection resistance, type-unsafe JSON states, non-UTF8 checkpoints, unicode titles.
+- `scripts/worktree.py` — per-sprint git worktree manager. Creates `.worktrees/sprint-N/` on a dedicated sprint branch, symlinks `.autonomous/` back to the main tree so coordination files stay single-sourced. Commands: `create`, `remove`, `list`, `ensure-gitignore`, `prune`, `path`. Refuses symlinked `.worktrees/` or `.autonomous/` to prevent repo escape; validates branch names via `git check-ref-format`; requires `is_git_repo` before remove.
+- `tests/test_worktree.sh` — 65 tests covering CRUD, validation, symlink escape refusal, unregistered-directory remove guard, branch name validation, `.autonomous` symlink write-through, and multi-sprint coexistence.
+
+### Changed
+- `autonomous/SKILL.md` Dispatch phase — when `AUTONOMOUS_SPRINT_WORKTREES=1` is set, each sprint runs in its own worktree instead of flipping the main tree onto the sprint branch. Default remains OFF (opt-in). Merge runs first (with `--keep-branch`), then worktree removal, then branch delete — if merge conflicts, worktree and branch are preserved for forensics.
+- `scripts/merge-sprint.py` — adds `--keep-branch` flag (skip final `git branch -D`, worktree mode deletes the branch separately after worktree removal). Merge failures now return 1 with the merge aborted cleanly instead of raising.
 
 ## [0.6.0] — 2026-04-09
 

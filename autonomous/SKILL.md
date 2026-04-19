@@ -180,14 +180,25 @@ python3 "$SCRIPT_DIR/scripts/backlog.py" update "$(pwd)" "<item-id>" priority 2
 python3 "$SCRIPT_DIR/scripts/conductor-state.py" sprint-start "$(pwd)" "$SPRINT_DIRECTION"
 SPRINT_NUM=$(python3 -c "import json; d=json.load(open('.autonomous/conductor-state.json')); print(len(d['sprints']))")
 SPRINT_BRANCH="${SESSION_BRANCH}-sprint-${SPRINT_NUM}"
-git checkout -b "$SPRINT_BRANCH"
 
-# Build sprint prompt (inlines SPRINT.md + params) and dispatch
+# Two modes — worktree-per-sprint (opt-in) or inline branch switching (default).
+# Worktree mode keeps the main tree on the session branch and runs each sprint
+# in its own .worktrees/sprint-N/ directory, giving file-level isolation
+# between consecutive sprints. Enable with AUTONOMOUS_SPRINT_WORKTREES=1.
+if [ "${AUTONOMOUS_SPRINT_WORKTREES:-0}" = "1" ]; then
+  python3 "$SCRIPT_DIR/scripts/worktree.py" ensure-gitignore "$(pwd)" >/dev/null || true
+  SPRINT_DIR=$(python3 "$SCRIPT_DIR/scripts/worktree.py" create "$(pwd)" "$SPRINT_NUM" "$SPRINT_BRANCH")
+else
+  git checkout -b "$SPRINT_BRANCH"
+  SPRINT_DIR="$(pwd)"
+fi
+
+# Build sprint prompt (always in the main tree's .autonomous/) and dispatch into $SPRINT_DIR.
 PREV_SUMMARY=""
 [ -f ".autonomous/sprint-$((SPRINT_NUM-1))-summary.json" ] && \
   PREV_SUMMARY=$(cat ".autonomous/sprint-$((SPRINT_NUM-1))-summary.json")
 python3 "$SCRIPT_DIR/scripts/build-sprint-prompt.py" "$(pwd)" "$SCRIPT_DIR" "$SPRINT_NUM" "$SPRINT_DIRECTION" "$PREV_SUMMARY"
-python3 "$SCRIPT_DIR/scripts/dispatch.py" "$(pwd)" .autonomous/sprint-prompt.md "sprint-$SPRINT_NUM"
+python3 "$SCRIPT_DIR/scripts/dispatch.py" "$SPRINT_DIR" .autonomous/sprint-prompt.md "sprint-$SPRINT_NUM"
 ```
 
 ### 3. Monitor — Wait for Sprint Completion
@@ -210,9 +221,14 @@ eval "$(python3 "$SCRIPT_DIR/scripts/evaluate-sprint.py" "$(pwd)" "$SCRIPT_DIR" 
 If the sprint master reported "direction_complete: true" but git shows no
 commits, override to "false".
 
-**Merge or discard the sprint branch:**
+**Merge or discard the sprint branch.** In worktree mode, the worktree must be
+removed before `merge-sprint.py` runs — `git branch -D` refuses to delete a
+branch checked out in a worktree:
 
 ```bash
+if [ "${AUTONOMOUS_SPRINT_WORKTREES:-0}" = "1" ]; then
+  python3 "$SCRIPT_DIR/scripts/worktree.py" remove "$(pwd)" "$SPRINT_NUM" || true
+fi
 python3 "$SCRIPT_DIR/scripts/merge-sprint.py" "$SESSION_BRANCH" "$SPRINT_BRANCH" "$SPRINT_NUM" "$STATUS" "$SUMMARY"
 ```
 
