@@ -41,6 +41,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/timeline.py` — Append-only JSONL session event log at `.autonomous/timeline.jsonl` (session-start, sprint-start, sprint-end, phase-transition, session-end)
 - `scripts/explore-scan.py` — Project scanner: scores 8 exploration dimensions via heuristics
 - `scripts/backlog.py` — Cross-session persistent backlog (progressive disclosure, mkdir locking, max 50 items)
+- `scripts/checkpoint.py` — Human-readable markdown snapshots of session state at `.autonomous/checkpoints/<ts>-<slug>.md` (save/list/latest/show)
 - `scripts/persona.py` — OWNER.md auto-generation from git history + project docs
 - `scripts/loop.py` — Standalone launcher (outside CC's skill system)
 - `scripts/master-poll.py` — Manual master polling for comms.json
@@ -154,7 +155,7 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 
 ## Testing
 
-515 tests across 10 suites, all pure bash:
+585 tests across 11 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
@@ -167,6 +168,7 @@ bash tests/test_build_sprint_prompt.sh  # 25 tests: template resolution, allow/b
 bash tests/test_eval_output.sh  # 35 tests: eval-safe output, shell quoting, tmux cleanup
 bash tests/test_timeline.sh     # 63 tests: append-only JSONL log, filters, conductor integration, phase-transition emission, non-raising emit, bounded tail
 bash tests/test_careful_hook.sh # 97 tests: PreToolUse hook pattern matching, adversarial bypasses, dispatch integration, window_name validation
+bash tests/test_checkpoint.sh   # 70 tests: save/list/latest/show, path-traversal rejection, YAML injection resistance, type-unsafe JSON, non-UTF8
 python3 -m compileall scripts   # quick syntax check
 ```
 
