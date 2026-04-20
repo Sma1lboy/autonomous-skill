@@ -4,6 +4,11 @@ All notable changes to autonomous-skill are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-04-19
+
+### Changed
+- GitHub repo renamed `Sma1lboy/autonomous-skill` → `Sma1lboy/autonomous`. Old clone/raw URLs continue working via GitHub's 301 redirects; no code changes required for existing installs.
+
 ### Added (experimental V2 parallel sprints)
 - `scripts/parallel-sprint.py` — V2 parallel sprint orchestrator. Dispatches K workers concurrently in isolated worktrees, waits for all to complete, merges in order serially. First merge conflict aborts the wave and preserves remaining worktrees + branches for inspection. Gated by `experimental.parallel_sprints=true` AND `mode.worktrees=true` — both must be on. Commands: `check`, `run`.
 - `experimental.max_parallel_sprints` config key (default 3). Also honored via `AUTONOMOUS_MAX_PARALLEL_SPRINTS` env var and `--max-parallel` CLI flag. Precedence: CLI > env > config > default.
