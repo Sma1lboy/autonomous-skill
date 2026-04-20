@@ -49,16 +49,36 @@ from typing import Any, NoReturn
 
 VERSION = 1
 
+# Path to the JSON Schema shipped with the skill. Written into config files
+# as "$schema" so VS Code / JSON validators pick it up for autocomplete.
+SCHEMA_URL = (
+    "https://raw.githubusercontent.com/Sma1lboy/autonomous-skill/main/"
+    "schemas/autonomous-config.schema.json"
+)
+
 # Keys that are user-toggleable. Env-var names where applicable.
 ENV_OVERRIDES: dict[str, str] = {
     "mode.worktrees": "AUTONOMOUS_SPRINT_WORKTREES",
     "mode.careful_hook": "AUTONOMOUS_WORKER_CAREFUL",
 }
 
-BOOL_KEYS = {"mode.worktrees", "mode.careful_hook"}
+BOOL_KEYS = {
+    "mode.worktrees",
+    "mode.careful_hook",
+    "experimental.vira_worktree",
+    "experimental.parallel_sprints",
+}
 STRING_KEYS = {"mode.template", "persona.scope"}
 VALID_TEMPLATES = {"gstack", "default"}
 VALID_PERSONA_SCOPES = {"global", "project"}
+
+# Experimental keys surface a stderr warning on every `check` so the user
+# never forgets they're running unstable code. Extend this set when adding
+# new experimental toggles. Also update the JSON Schema.
+EXPERIMENTAL_KEYS = {
+    "experimental.vira_worktree",
+    "experimental.parallel_sprints",
+}
 
 DEFAULTS: dict[str, Any] = {
     "mode": {
@@ -69,6 +89,10 @@ DEFAULTS: dict[str, Any] = {
     "persona": {
         "scope": "global",
         "last_generated": None,
+    },
+    "experimental": {
+        "vira_worktree": False,
+        "parallel_sprints": False,
     },
 }
 
@@ -189,9 +213,31 @@ def is_configured() -> bool:
     return global_config_path().exists()
 
 
+def _enabled_experimental(project: Path | None) -> list[str]:
+    """Return the list of experimental.* keys currently set to true in the
+    effective config (after project/global merge). Used to warn on startup."""
+    cfg = load_effective(project)
+    enabled: list[str] = []
+    for key in EXPERIMENTAL_KEYS:
+        value = _get_nested(cfg, key)
+        if value is True:
+            enabled.append(key)
+    return enabled
+
+
 def cmd_check(args: argparse.Namespace) -> None:
-    """Print 'configured' or 'needs-setup'. Called from SKILL.md startup."""
+    """Print 'configured' or 'needs-setup' to stdout. If any experimental
+    flag is on, also print a single-line WARNING to stderr — stdout stays
+    machine-parseable for bash callers, the warning is a human cue."""
     print("configured" if is_configured() else "needs-setup")
+    project = Path(args.project).resolve() if args.project else None
+    enabled = _enabled_experimental(project)
+    if enabled:
+        print(
+            "WARNING: experimental flags enabled (subject to breaking changes): "
+            + ", ".join(sorted(enabled)),
+            file=sys.stderr,
+        )
 
 
 def _coerce_value(key: str, raw: str) -> Any:
@@ -257,10 +303,15 @@ def _write_at_scope(
         # a project-scope write to shadow keys the user set globally (e.g.,
         # setting mode.worktrees=false at project would also write
         # mode.careful_hook=false and erase the inherited global value).
-        existing = {"version": VERSION, "created_at": now_iso()}
+        existing = {
+            "$schema": SCHEMA_URL,
+            "version": VERSION,
+            "created_at": now_iso(),
+        }
     mutation(existing)
     existing["updated_at"] = now_iso()
     existing.setdefault("version", VERSION)
+    existing.setdefault("$schema", SCHEMA_URL)
     _atomic_write_json(path, existing)
     return path
 
@@ -319,6 +370,43 @@ def cmd_show(args: argparse.Namespace) -> None:
     else:  # effective (default)
         data = load_effective(project)
     print(json.dumps(data, indent=2))
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    """Write a fully-populated sample config at the chosen scope.
+
+    Unlike `setup` (which only writes the keys the user answered), `init`
+    lays down every known field at its default value with the `$schema`
+    reference. Useful as a manual starting point: users can edit the file
+    with full IDE autocomplete via the schema, without having to memorize
+    the key names.
+
+    Refuses to overwrite an existing config — rename the subcommand to
+    `set` or delete the file if you really want to start over.
+    """
+    project = Path(args.project).resolve() if args.project else None
+    if args.scope == "global":
+        path = global_config_path()
+    else:
+        if project is None:
+            die("--project is required when --scope=project")
+        path = project_config_path(project)
+
+    if path.exists():
+        die(
+            f"config already exists at {path}. Edit it directly or use "
+            "`set`/`setup`; `init` refuses to overwrite."
+        )
+
+    seeded = {
+        "$schema": SCHEMA_URL,
+        "version": VERSION,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    seeded.update(json.loads(json.dumps(DEFAULTS)))  # deep copy
+    _atomic_write_json(path, seeded)
+    print(f"wrote sample config to {path}")
 
 
 def cmd_paths(args: argparse.Namespace) -> None:
@@ -381,6 +469,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_show.add_argument("--project", default=None)
     p_show.set_defaults(func=cmd_show)
+
+    p_init = sub.add_parser(
+        "init",
+        help="write a fully-populated sample config (all fields, defaults, $schema)",
+    )
+    p_init.add_argument("--scope", choices=["global", "project"], default="global")
+    p_init.add_argument("--project", default=None)
+    p_init.set_defaults(func=cmd_init)
 
     p_paths = sub.add_parser("paths", help="print resolved paths (debug)")
     p_paths.add_argument("--project", default=None)

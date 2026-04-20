@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Sma1lboy/autonomous-skill/main/schemas/autonomous-config.schema.json",
+  "title": "autonomous-skill config",
+  "description": "Schema for ~/.claude/autonomous/config.json (global) and <project>/.autonomous/config.json (per-project). Precedence at read time: env var > project > global > defaults.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional schema URL for IDE/editor autocomplete and validation."
+    },
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Bump on breaking shape changes."
+    },
+    "mode": {
+      "type": "object",
+      "description": "Stable mode toggles consumed by the skill at startup and during dispatch.",
+      "additionalProperties": false,
+      "properties": {
+        "worktrees": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, each sprint runs in its own .worktrees/sprint-N/ git worktree; the main tree stays on the session branch. Env override: AUTONOMOUS_SPRINT_WORKTREES."
+        },
+        "careful_hook": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, dispatched workers get a PreToolUse hook (scripts/hooks/careful.sh) that blocks catastrophic Bash commands (rm -rf /, mkfs, force-push to main, DROP TABLE, etc.). Env override: AUTONOMOUS_WORKER_CAREFUL."
+        },
+        "template": {
+          "type": "string",
+          "default": "gstack",
+          "description": "Worker-task template name. Ships with 'gstack' (uses /office-hours, /qa, /investigate, blocks /ship) and 'default' (generic). Custom templates live at templates/<name>/template.md."
+        }
+      }
+    },
+    "persona": {
+      "type": "object",
+      "description": "OWNER.md persona configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": ["global", "project"],
+          "default": "global",
+          "description": "'global' places OWNER.md at ~/.claude/autonomous/OWNER.md (shared across projects). 'project' routes it to <project>/.autonomous/OWNER.md."
+        },
+        "last_generated": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "ISO timestamp of the last persona generation. Null until persona.py runs once."
+        }
+      }
+    },
+    "experimental": {
+      "type": "object",
+      "description": "EXPERIMENTAL — behavior under active development, subject to breaking changes. Enable only if you accept the instability.",
+      "additionalProperties": false,
+      "properties": {
+        "vira_worktree": {
+          "type": "boolean",
+          "default": false,
+          "description": "EXPERIMENTAL. Enables the vira worktree execution path. Implementation tracked for a future PR; setting this true currently has no effect beyond surfacing the warning."
+        },
+        "parallel_sprints": {
+          "type": "boolean",
+          "default": false,
+          "description": "EXPERIMENTAL. Enables parallel sprint dispatch with file-overlap guards (V2 worktree mode). When enabled the conductor will plan K independent sprints, dispatch them concurrently, and serialize merges. Implementation tracked for a future PR; setting this true currently has no effect beyond surfacing the warning."
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this config file was first written."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Most recent modification timestamp."
+    }
+  }
+}
