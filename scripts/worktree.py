@@ -14,10 +14,20 @@ via `$(pwd)/.autonomous/` as before — the symlink is transparent.
 
 V1 scope: serial sprints, worktree per sprint, isolation only. Parallel
 dispatch + file-overlap guards are deferred to V2.
+
+Safety invariants (enforced, see codex review on PR #55):
+- `.worktrees/` and `.autonomous/` in the project root must be real
+  directories, not symlinks. A symlink would let `git worktree add` and
+  the symlink target resolution escape the project.
+- `remove` always validates the target is a real git worktree under the
+  project's `.worktrees/`. Never delegates to `rmtree` against arbitrary paths.
+- Branch name must pass `git check-ref-format --branch`.
+- Sprint number must be a positive integer (not 0, not negative).
 """
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +45,43 @@ def worktree_root(project_root: Path) -> Path:
 
 def sprint_worktree_path(project_root: Path, sprint_num: int) -> Path:
     return worktree_root(project_root) / f"sprint-{sprint_num}"
+
+
+def _assert_real_dir(path: Path, label: str) -> None:
+    """Refuse to proceed if `path` exists and is a symlink (not a real dir).
+    Prevents an attacker or accident from making `.worktrees/` or
+    `.autonomous/` point outside the repo so subsequent file ops escape."""
+    if path.exists() and path.is_symlink():
+        die(f"{label} is a symlink — refusing to operate ({path} -> {os.readlink(path)})")
+
+
+def _validate_sprint_num(raw: str) -> int:
+    """Parse and validate sprint number. Must be a positive integer so
+    path composition (`sprint-{n}`) can't produce oddities like `sprint--1`
+    or `sprint-0` that collide with manual work."""
+    try:
+        n = int(raw)
+    except ValueError:
+        die(f"sprint-num must be integer, got: {raw}")
+    if n < 1:
+        die(f"sprint-num must be >= 1, got: {n}")
+    return n
+
+
+def _validate_branch_name(name: str, project_root: Path) -> None:
+    """Ensure branch name is safe for git. Uses git's own validator to
+    reject control chars, leading `-`, whitespace, reserved sequences, etc."""
+    if not name.strip():
+        die("branch-name is required")
+    result = subprocess.run(
+        ["git", "check-ref-format", "--branch", name],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        die(f"invalid branch name '{name}': {result.stderr.strip() or 'rejected by git check-ref-format'}")
 
 
 def git(args: list[str], *, cwd: Path, check: bool = True) -> subprocess.CompletedProcess:
@@ -64,24 +111,26 @@ def cmd_create(project_root: Path, args: list[str]) -> None:
     """create <sprint-num> <branch-name>"""
     if len(args) < 2:
         die("Usage: worktree.py create <project-root> <sprint-num> <branch-name>")
-    try:
-        sprint_num = int(args[0])
-    except ValueError:
-        die(f"sprint-num must be integer, got: {args[0]}")
+    sprint_num = _validate_sprint_num(args[0])
     branch_name = args[1]
-    if not branch_name.strip():
-        die("branch-name is required")
 
     if not is_git_repo(project_root):
         die(f"not a git repo: {project_root}")
+    _validate_branch_name(branch_name, project_root)
+
+    # Refuse to operate if .worktrees/ or .autonomous/ are pre-existing
+    # symlinks — they'd escape the repo via git's followed-path writes.
+    worktrees_dir = worktree_root(project_root)
+    _assert_real_dir(worktrees_dir, ".worktrees")
+    _assert_real_dir(project_root / ".autonomous", ".autonomous")
 
     wt_path = sprint_worktree_path(project_root, sprint_num)
-    worktree_root(project_root).mkdir(exist_ok=True)
+    worktrees_dir.mkdir(exist_ok=True)
 
     # Prune stale entries before creating a new one. Harmless if nothing is stale.
     git(["worktree", "prune"], cwd=project_root, check=False)
 
-    if wt_path.exists():
+    if wt_path.exists() or wt_path.is_symlink():
         die(f"worktree path already exists: {wt_path}. Run `worktree.py remove {sprint_num}` first.")
 
     # Create worktree on new branch off current HEAD (session branch).
@@ -94,18 +143,26 @@ def cmd_create(project_root: Path, args: list[str]) -> None:
         die(f"git worktree add failed: {result.stderr.strip() or result.stdout.strip()}")
 
     # Symlink .autonomous so coordination files stay in the main tree.
+    # Target is the literal project_root/.autonomous (NOT resolved) so
+    # redirection via a malicious .autonomous → /elsewhere is not silently
+    # propagated into every worktree.
     main_autonomous = project_root / ".autonomous"
-    main_autonomous.mkdir(exist_ok=True)
+    _assert_real_dir(main_autonomous, ".autonomous (re-check post-mkdir)")
+    try:
+        main_autonomous.mkdir(exist_ok=True)
+    except FileExistsError:
+        pass
+
     worktree_autonomous = wt_path / ".autonomous"
-    if worktree_autonomous.exists() or worktree_autonomous.is_symlink():
-        # Remove whatever's there — a fresh checkout shouldn't have .autonomous
-        # (it's gitignored) but belt-and-suspenders.
+    # A fresh worktree shouldn't have .autonomous (gitignored), but git may
+    # carry it through if a previous tree left a symlink. Remove defensively.
+    if worktree_autonomous.is_symlink() or worktree_autonomous.exists():
         if worktree_autonomous.is_symlink() or worktree_autonomous.is_file():
             worktree_autonomous.unlink()
         else:
             import shutil
             shutil.rmtree(worktree_autonomous)
-    worktree_autonomous.symlink_to(main_autonomous.resolve(), target_is_directory=True)
+    worktree_autonomous.symlink_to(main_autonomous, target_is_directory=True)
 
     print(str(wt_path.resolve()))
 
@@ -114,10 +171,10 @@ def cmd_remove(project_root: Path, args: list[str]) -> None:
     """remove <sprint-num>"""
     if not args:
         die("Usage: worktree.py remove <project-root> <sprint-num>")
-    try:
-        sprint_num = int(args[0])
-    except ValueError:
-        die(f"sprint-num must be integer, got: {args[0]}")
+    sprint_num = _validate_sprint_num(args[0])
+
+    if not is_git_repo(project_root):
+        die(f"not a git repo: {project_root}")
 
     wt_path = sprint_worktree_path(project_root, sprint_num)
 
@@ -127,11 +184,29 @@ def cmd_remove(project_root: Path, args: list[str]) -> None:
         print(f"worktree sprint-{sprint_num} not present (nothing to remove)")
         return
 
-    # Unlink the .autonomous symlink first so git worktree remove doesn't
-    # complain about unknown content or follow it into the main tree.
+    # Confirm this path is actually a git worktree known to the repo. Refuse
+    # to delete arbitrary directories even if they happen to live at
+    # .worktrees/sprint-N. This prevents the remove fallback from rmtree'ing
+    # user data that ended up at that path by accident.
+    list_result = git(["worktree", "list", "--porcelain"], cwd=project_root, check=False)
+    known_paths: set[str] = set()
+    for raw in list_result.stdout.splitlines():
+        if raw.startswith("worktree "):
+            known_paths.add(raw[len("worktree "):].strip())
+    if str(wt_path.resolve()) not in known_paths and str(wt_path) not in known_paths:
+        die(
+            f"refusing to remove: {wt_path} is not a registered git worktree. "
+            "If this is stale state, delete it manually."
+        )
+
+    # Unlink the .autonomous symlink so git worktree remove doesn't follow
+    # it into the main tree. Only unlink if it really is a symlink (never a
+    # real directory — that would mean state split already happened).
     wt_autonomous = wt_path / ".autonomous"
+    autonomous_unlinked = False
     if wt_autonomous.is_symlink():
         wt_autonomous.unlink()
+        autonomous_unlinked = True
 
     # --force removes even if the worktree has uncommitted changes. By the
     # time conductor calls remove(), evaluate-sprint has already read the
@@ -141,13 +216,37 @@ def cmd_remove(project_root: Path, args: list[str]) -> None:
         cwd=project_root,
         check=False,
     )
-    if result.returncode != 0:
-        # Fall back to prune + rmdir if git is confused about the worktree.
+    success = result.returncode == 0
+    if not success:
+        # Git refused to remove. Try pruning and cleaning up the directory,
+        # but ONLY if it's still under .worktrees/ (sanity re-check — the
+        # earlier registered-worktree check already validated this).
         git(["worktree", "prune"], cwd=project_root, check=False)
         if wt_path.exists():
+            resolved = wt_path.resolve()
+            expected_parent = worktree_root(project_root).resolve()
+            try:
+                resolved.relative_to(expected_parent)
+            except ValueError:
+                die(f"refusing to rmtree: {resolved} is not under {expected_parent}")
             import shutil
             shutil.rmtree(wt_path, ignore_errors=True)
-    print(f"worktree sprint-{sprint_num} removed")
+            success = not wt_path.exists()
+
+    # Restore the .autonomous symlink if we unlinked it but removal failed;
+    # otherwise the worktree is in a state-split condition (present without
+    # the symlink, so any .autonomous created locally is divergent data).
+    if not success and autonomous_unlinked and wt_path.exists():
+        try:
+            wt_autonomous.symlink_to(project_root / ".autonomous", target_is_directory=True)
+        except OSError:
+            pass
+        die(f"worktree remove failed: {result.stderr.strip() or result.stdout.strip()}")
+
+    if success:
+        print(f"worktree sprint-{sprint_num} removed")
+    else:
+        die(f"worktree remove failed: {result.stderr.strip() or result.stdout.strip()}")
 
 
 def cmd_list(project_root: Path, args: list[str]) -> None:

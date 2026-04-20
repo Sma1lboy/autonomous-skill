@@ -284,4 +284,103 @@ echo '{"sprint":3}' > "$T/.autonomous/conductor-state.json"
 READBACK=$(cat "$WT_PATH/.autonomous/conductor-state.json")
 assert_contains "$READBACK" "sprint" "main tree write visible in worktree"
 
+# ── 14. Adversarial regression (Codex review findings) ──────────────────
+
+echo ""
+echo "14. Adversarial regression (Codex findings)"
+
+# P1: .worktrees/ pre-existing as a symlink must be refused
+T=$(make_repo)
+VICTIM=$(new_tmp)
+mkdir -p "$VICTIM/would-be-pwned"
+ln -s "$VICTIM" "$T/.worktrees"
+if python3 "$WT" create "$T" 1 "auto/symlink-escape" 2>/dev/null; then
+  fail "create must refuse when .worktrees/ is a pre-existing symlink"
+else
+  ok "create refuses symlinked .worktrees/"
+fi
+[ ! -d "$VICTIM/sprint-1" ] && ok "no escape: nothing written into symlink target" || fail "symlink escape occurred"
+
+# .autonomous/ pre-existing as a symlink must be refused
+T=$(make_repo)
+VICTIM=$(new_tmp)
+ln -s "$VICTIM" "$T/.autonomous"
+if python3 "$WT" create "$T" 1 "auto/autonomous-escape" 2>/dev/null; then
+  fail "create must refuse when .autonomous/ is a pre-existing symlink"
+else
+  ok "create refuses symlinked .autonomous/"
+fi
+
+# P1: remove requires a git repo
+TNG=$(new_tmp)
+mkdir -p "$TNG/.worktrees/sprint-1"
+echo "user data" > "$TNG/.worktrees/sprint-1/important.txt"
+if python3 "$WT" remove "$TNG" 1 2>/dev/null; then
+  fail "remove on non-git directory should fail"
+else
+  ok "remove rejects non-git directory"
+fi
+[ -f "$TNG/.worktrees/sprint-1/important.txt" ] && \
+  ok "user data untouched when remove refused" || \
+  fail "CATASTROPHIC: user data deleted"
+
+# P1: remove refuses to delete a directory that isn't a registered worktree
+T=$(make_repo)
+mkdir -p "$T/.worktrees/sprint-99"
+echo "not a real worktree" > "$T/.worktrees/sprint-99/data.txt"
+if python3 "$WT" remove "$T" 99 2>/dev/null; then
+  fail "remove must refuse unregistered directory"
+else
+  ok "remove refuses directory not tracked by git worktree"
+fi
+[ -f "$T/.worktrees/sprint-99/data.txt" ] && ok "unregistered dir preserved" || fail "unregistered dir deleted"
+
+# P2: branch name validation (delegates to git check-ref-format)
+T=$(make_repo)
+for BAD_NAME in "-bad" "bad..name" "bad~name" "HEAD"; do
+  if python3 "$WT" create "$T" 99 "$BAD_NAME" 2>/dev/null; then
+    fail "invalid branch name '$BAD_NAME' should be rejected"
+  else
+    ok "invalid branch name rejected: $BAD_NAME"
+  fi
+done
+
+# P2: sprint-num must be >= 1
+T=$(make_repo)
+if python3 "$WT" create "$T" 0 "auto/zero" 2>/dev/null; then
+  fail "sprint-num 0 should be rejected"
+else
+  ok "sprint-num 0 rejected"
+fi
+if python3 "$WT" create "$T" -5 "auto/neg" 2>/dev/null; then
+  fail "negative sprint-num should be rejected"
+else
+  ok "negative sprint-num rejected"
+fi
+
+# Regression: idempotent remove doesn't lie about which case it hit
+T=$(make_repo)
+python3 "$WT" create "$T" 1 "auto/lie-check" > /dev/null
+OUT=$(python3 "$WT" remove "$T" 1)
+assert_contains "$OUT" "removed" "success message on real removal"
+OUT2=$(python3 "$WT" remove "$T" 1)
+assert_contains "$OUT2" "not present" "idempotent remove says 'not present', not 'removed'"
+
+# P1 verification: merge-sprint.py --keep-branch flag exists + skips branch -D
+T=$(make_repo)
+(cd "$T" && git checkout -b auto/session-test) > /dev/null 2>&1
+python3 "$WT" create "$T" 1 "auto/keeptest-sprint-1" > /dev/null
+# Add a commit in the sprint worktree so merge has something to do
+(cd "$T/.worktrees/sprint-1" && echo "data" > f.txt && git add f.txt && \
+  git -c user.email=t@t -c user.name=t commit -q -m "sprint work") > /dev/null
+MERGE_OUT=$(python3 "$SCRIPT_DIR/../scripts/merge-sprint.py" --keep-branch \
+  "auto/session-test" "auto/keeptest-sprint-1" 1 complete "test merge" \
+  --project-dir "$T" 2>&1)
+# Branch should STILL exist because we used --keep-branch
+BRANCH_EXISTS=$(cd "$T" && git show-ref --verify --quiet refs/heads/auto/keeptest-sprint-1 && echo yes || echo no)
+assert_eq "$BRANCH_EXISTS" "yes" "--keep-branch preserves sprint branch after merge"
+# Clean up
+python3 "$WT" remove "$T" 1 > /dev/null
+(cd "$T" && git branch -D auto/keeptest-sprint-1) > /dev/null 2>&1
+
 print_results

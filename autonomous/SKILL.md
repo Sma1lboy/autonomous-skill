@@ -221,15 +221,24 @@ eval "$(python3 "$SCRIPT_DIR/scripts/evaluate-sprint.py" "$(pwd)" "$SCRIPT_DIR" 
 If the sprint master reported "direction_complete: true" but git shows no
 commits, override to "false".
 
-**Merge or discard the sprint branch.** In worktree mode, the worktree must be
-removed before `merge-sprint.py` runs — `git branch -D` refuses to delete a
-branch checked out in a worktree:
+**Merge or discard the sprint branch.** In worktree mode we flip the order:
+merge first (with `--keep-branch` so the branch survives), then remove the
+worktree, then delete the branch. This preserves forensic state on merge
+conflicts — the worktree stays for inspection instead of being wiped before
+we know whether the merge succeeded.
 
 ```bash
 if [ "${AUTONOMOUS_SPRINT_WORKTREES:-0}" = "1" ]; then
-  python3 "$SCRIPT_DIR/scripts/worktree.py" remove "$(pwd)" "$SPRINT_NUM" || true
+  if python3 "$SCRIPT_DIR/scripts/merge-sprint.py" --keep-branch \
+       "$SESSION_BRANCH" "$SPRINT_BRANCH" "$SPRINT_NUM" "$STATUS" "$SUMMARY"; then
+    python3 "$SCRIPT_DIR/scripts/worktree.py" remove "$(pwd)" "$SPRINT_NUM" || true
+    git branch -D "$SPRINT_BRANCH" 2>/dev/null || true
+  else
+    echo "Merge of sprint $SPRINT_NUM failed (conflicts). Worktree preserved at .worktrees/sprint-$SPRINT_NUM for inspection; branch $SPRINT_BRANCH kept. Conductor should treat this as a blocked sprint."
+  fi
+else
+  python3 "$SCRIPT_DIR/scripts/merge-sprint.py" "$SESSION_BRANCH" "$SPRINT_BRANCH" "$SPRINT_NUM" "$STATUS" "$SUMMARY"
 fi
-python3 "$SCRIPT_DIR/scripts/merge-sprint.py" "$SESSION_BRANCH" "$SPRINT_BRANCH" "$SPRINT_NUM" "$STATUS" "$SUMMARY"
 ```
 
 **If exploring**: Score the dimension after the sprint:
