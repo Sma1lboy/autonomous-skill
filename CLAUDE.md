@@ -202,6 +202,46 @@ When contributing to this project, follow these rules:
 - Run `python3 -m compileall scripts` before committing Python changes
 - Run affected test suites before pushing
 
+### Sandbox verification (end-to-end, per PR)
+After unit tests pass, every PR that touches user-facing behavior gets an
+end-to-end sandbox run that exercises the full flow (fresh HOME, fresh git
+project, real subprocess invocations — not just stubs).
+
+**Delegate to a subagent, don't run sandbox scripts in the main session.**
+Rationale:
+- Sandbox output (raw command dumps, file listings, multi-step logs) pollutes
+  the main context window fast. A subagent isolates that noise.
+- Subagents can run a scenario matrix in parallel and report pass/fail only.
+- If the sandbox flags something, the main session still sees the summary + failure
+  details without drowning in everything that passed.
+
+Prompt shape (brief the subagent like a colleague — include branch, feature
+summary, precise scenarios, and what "pass" means per scenario):
+
+```
+You are a sandbox test runner for autonomous-skill at <path>. Branch <name>.
+Feature under test: <one paragraph>.
+
+Ensure you're on the branch, then run these scenarios:
+1. ...
+2. ...
+10. ...
+
+For each: print [PASS] or [FAIL] on one line with scenario number + brief reason.
+If FAIL, include the command output so we can diagnose.
+
+Safety:
+- Sandbox HOME (mktemp -d), sandbox git project (mktemp -d + git init) per scenario
+- Never write to the real ~/.claude/<anything>
+- Kill any stray claude processes you spawned
+
+Final line: SUMMARY: N/M passed.
+```
+
+Scope rule: any PR touching `scripts/`, `autonomous/SKILL.md`, `quickdo/SKILL.md`,
+or worker dispatch should add a sandbox run to its test plan. Pure doc/test
+changes can skip this.
+
 ### Commit messages
 - Conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `perf:`
 - Lowercase, imperative, concise
