@@ -211,6 +211,23 @@ Each checkpoint is a markdown file at `.autonomous/checkpoints/<ts>-<slug>.md` c
 
 Useful for context switching ("where was I yesterday?"), sharing session state with a teammate, or reviewing sprint output before resuming.
 
+### Sprint worktrees (opt-in)
+
+Set `AUTONOMOUS_SPRINT_WORKTREES=1` to run each sprint in its own git worktree under `.worktrees/sprint-N/`:
+
+```bash
+AUTONOMOUS_SPRINT_WORKTREES=1 /autonomous 5 build REST API
+```
+
+- Main tree stays on the session branch the whole time — no `git checkout -b` churn
+- Each sprint works on its own branch in its own directory, fully file-isolated
+- `.autonomous/` is symlinked from each worktree back to the main tree, so comms, state, summaries, and backlog all go through one source of truth
+- `.worktrees/` is auto-added to `.gitignore` on first sprint
+- On sprint completion: merge runs first (with `--keep-branch`), then the worktree is removed, then the branch is deleted. If merge conflicts, worktree and branch are preserved for forensic inspection.
+- `.worktrees/` or `.autonomous/` pre-existing as symlinks are refused (repo-escape prevention).
+
+V1 is serial-only — one sprint at a time. Parallel sprint dispatch is deferred to a future PR.
+
 
 ## Configuration
 
