@@ -4,6 +4,14 @@ All notable changes to autonomous-skill are documented here.
 
 ## [Unreleased]
 
+### Added (experimental flags + schema)
+- `schemas/autonomous-config.schema.json` — JSON Schema (draft-07) documenting every field in `~/.claude/autonomous/config.json` with per-key descriptions. IDEs pick it up via `$schema` for autocomplete.
+- `user-config.py init` — write a fully-populated sample config (all sections, defaults, `$schema` reference) at global or project scope. Refuses to overwrite existing configs.
+- `experimental` section in config schema with two flags — `vira_worktree` and `parallel_sprints`. Both default to false; setting either on emits a WARNING to stderr on every `check` call. Implementation of these features is tracked for a future PR; the flags themselves are no-ops until then but are documented and persist across restarts.
+- `user-config.py check` now emits `WARNING: experimental flags enabled: ...` to stderr when any experimental flag is on. Stdout stays machine-readable (`configured`/`needs-setup`) for bash callers.
+- All written configs include `"$schema": "..."` reference so editors can validate + autocomplete.
+
+
 ### Added
 - `scripts/user-config.py` — global + project config, replaces scattered env vars as the source of truth for mode toggles. Commands: `check`, `get`, `set`, `setup`, `show`, `paths`. Precedence: env > `<project>/.autonomous/config.json` > `~/.claude/autonomous/config.json` > defaults. Reads legacy `.autonomous/skill-config.json` for back-compat.
 - First-time setup in `autonomous/SKILL.md` — when no global config exists, asks once via `AskUserQuestion` for `worktrees`, `careful_hook`, and `scope` (global/project), persists, never asks again.

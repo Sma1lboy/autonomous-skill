@@ -213,4 +213,140 @@ echo '["list","not","dict"]' > "$T/.autonomous/config.json"
 OUT=$(HOME="$H" python3 "$UC" get mode.worktrees "$T" 2>&1)
 assert_eq "$OUT" "false" "malformed configs fall through to default"
 
+# ── 12. Experimental flags ──────────────────────────────────────────────
+
+echo ""
+echo "12. Experimental flags"
+
+H=$(sandbox_home)
+T=$(make_project)
+# Defaults: both experimental flags off
+HOME="$H" python3 "$UC" setup --scope global --worktrees on > /dev/null
+VIRA=$(HOME="$H" python3 "$UC" get experimental.vira_worktree "$T")
+PARA=$(HOME="$H" python3 "$UC" get experimental.parallel_sprints "$T")
+assert_eq "$VIRA" "false" "vira_worktree defaults to false"
+assert_eq "$PARA" "false" "parallel_sprints defaults to false"
+
+# Can be set
+HOME="$H" python3 "$UC" set experimental.vira_worktree true --scope global > /dev/null
+VIRA=$(HOME="$H" python3 "$UC" get experimental.vira_worktree "$T")
+assert_eq "$VIRA" "true" "experimental flag set persists"
+
+# Validation: must be bool
+if HOME="$H" python3 "$UC" set experimental.vira_worktree maybe --scope global 2>/dev/null; then
+  fail "non-bool experimental value should be rejected"
+else
+  ok "non-bool experimental value rejected"
+fi
+
+# check emits warning to stderr when any experimental is on
+STDERR=$(HOME="$H" python3 "$UC" check "$T" 2>&1 >/dev/null)
+assert_contains "$STDERR" "experimental flags enabled" "check warns on experimental"
+assert_contains "$STDERR" "vira_worktree" "warning names the enabled flag"
+
+# stdout stays clean (machine-readable)
+STDOUT=$(HOME="$H" python3 "$UC" check "$T" 2>/dev/null)
+assert_eq "$STDOUT" "configured" "stdout unchanged by experimental warning"
+
+# No warning when all experimental flags are off
+HOME="$H" python3 "$UC" set experimental.vira_worktree false --scope global > /dev/null
+STDERR=$(HOME="$H" python3 "$UC" check "$T" 2>&1 >/dev/null)
+assert_not_contains "$STDERR" "experimental" "no warning when no experimental flags on"
+
+# ── 13. $schema reference in written configs ────────────────────────────
+
+echo ""
+echo "13. \$schema reference"
+
+H=$(sandbox_home)
+HOME="$H" python3 "$UC" setup --scope global --worktrees on > /dev/null
+CONFIG="$H/.claude/autonomous/config.json"
+assert_file_contains "$CONFIG" "autonomous-config.schema.json" "setup writes \$schema field"
+
+# set also writes $schema if file didn't exist
+H=$(sandbox_home)
+HOME="$H" python3 "$UC" set mode.worktrees true --scope global > /dev/null
+assert_file_contains "$H/.claude/autonomous/config.json" "autonomous-config.schema.json" "set writes \$schema on fresh file"
+
+# ── 14. init command ────────────────────────────────────────────────────
+
+echo ""
+echo "14. init command (sample config)"
+
+H=$(sandbox_home)
+OUT=$(HOME="$H" python3 "$UC" init --scope global)
+assert_contains "$OUT" "wrote sample config" "init prints path"
+
+CONFIG="$H/.claude/autonomous/config.json"
+assert_file_exists "$CONFIG" "init wrote a config"
+# All top-level sections present
+assert_file_contains "$CONFIG" '"mode"' "init seeds mode section"
+assert_file_contains "$CONFIG" '"persona"' "init seeds persona section"
+assert_file_contains "$CONFIG" '"experimental"' "init seeds experimental section"
+assert_file_contains "$CONFIG" '"vira_worktree"' "init lists vira_worktree"
+assert_file_contains "$CONFIG" '"parallel_sprints"' "init lists parallel_sprints"
+assert_file_contains "$CONFIG" "autonomous-config.schema.json" "init includes \$schema"
+
+# init refuses to overwrite
+if HOME="$H" python3 "$UC" init --scope global 2>/dev/null; then
+  fail "init should refuse when config exists"
+else
+  ok "init refuses to clobber existing config"
+fi
+
+# init --scope project requires --project
+H=$(sandbox_home)
+if HOME="$H" python3 "$UC" init --scope project 2>/dev/null; then
+  fail "init --scope project without --project should fail"
+else
+  ok "init --scope project requires --project"
+fi
+
+# init --scope project + --project works
+T=$(make_project)
+HOME="$H" python3 "$UC" init --scope project --project "$T" > /dev/null
+assert_file_exists "$T/.autonomous/config.json" "init writes project config"
+
+# ── 15. Schema file exists and is valid ─────────────────────────────────
+
+echo ""
+echo "15. Schema file integrity"
+
+SCHEMA_FILE="$SCRIPT_DIR/../schemas/autonomous-config.schema.json"
+assert_file_exists "$SCHEMA_FILE" "schema file present"
+
+# Valid JSON
+VALID=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$SCHEMA_FILE'))
+    assert d.get('title') == 'autonomous-skill config'
+    assert 'mode' in d.get('properties', {})
+    assert 'experimental' in d.get('properties', {})
+    assert 'vira_worktree' in d['properties']['experimental'].get('properties', {})
+    assert 'parallel_sprints' in d['properties']['experimental'].get('properties', {})
+    print('ok')
+except Exception as e:
+    print(f'fail: {e}', file=sys.stderr)
+    sys.exit(1)
+")
+assert_eq "$VALID" "ok" "schema documents mode + experimental sections"
+
+# Schema matches what user-config.py writes
+H=$(sandbox_home)
+HOME="$H" python3 "$UC" init --scope global > /dev/null
+python3 -c "
+import json
+schema = json.load(open('$SCHEMA_FILE'))
+config = json.load(open('$H/.claude/autonomous/config.json'))
+# Every top-level property in the written config should be in schema.properties
+schema_props = set(schema.get('properties', {}).keys())
+config_keys = set(config.keys())
+missing = config_keys - schema_props
+assert not missing, f'config has keys not in schema: {missing}'
+print('ok')
+" > /tmp/schema-check.out
+assert_eq "$(cat /tmp/schema-check.out)" "ok" "every config key is documented in schema"
+rm -f /tmp/schema-check.out
+
 print_results
