@@ -409,6 +409,47 @@ def cmd_init(args: argparse.Namespace) -> None:
     print(f"wrote sample config to {path}")
 
 
+def cmd_experimental(args: argparse.Namespace) -> None:
+    """Emit shell-eval-able env vars for every experimental flag, plus a
+    short note listing which are enabled. This is the unified interface
+    SKILL.md consumes at the start of each Plan phase — adding a new
+    experimental feature means editing this script's EXPERIMENTAL_KEYS
+    and DEFAULTS, nothing else; the conductor picks it up automatically.
+
+    Output format (stdout, safe to `eval`):
+        EXPERIMENTAL_PARALLEL_SPRINTS=true
+        EXPERIMENTAL_VIRA_WORKTREE=false
+        EXPERIMENTAL_ENABLED="parallel_sprints"   # space-separated short names
+
+    The `EXPERIMENTAL_ENABLED` var is a convenience for scripts that want
+    to quickly check "is anything experimental on?" without listing every flag.
+    """
+    project = Path(args.project).resolve() if args.project else None
+    cfg = load_effective(project)
+
+    enabled_short: list[str] = []
+    for key in sorted(EXPERIMENTAL_KEYS):
+        # Env var name: uppercase, strip "experimental." prefix
+        short = key.split(".", 1)[1] if "." in key else key
+        env_name = "EXPERIMENTAL_" + short.upper()
+
+        # Honor env-override precedence used everywhere else in this module
+        env_override = os.environ.get(env_name)
+        if env_override is not None:
+            parsed = _parse_bool_env(env_override)
+            value = parsed if parsed is not None else False
+        else:
+            raw = _get_nested(cfg, key)
+            value = bool(raw) if raw is not None else False
+
+        print(f"{env_name}={'true' if value else 'false'}")
+        if value:
+            enabled_short.append(short)
+
+    # Shell-safe join (short names are alphanumeric + underscore, no quoting needed)
+    print(f'EXPERIMENTAL_ENABLED="{" ".join(enabled_short)}"')
+
+
 def cmd_paths(args: argparse.Namespace) -> None:
     project = Path(args.project).resolve() if args.project else None
     print(f"global_dir:      {global_dir()}")
@@ -477,6 +518,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--scope", choices=["global", "project"], default="global")
     p_init.add_argument("--project", default=None)
     p_init.set_defaults(func=cmd_init)
+
+    p_exp = sub.add_parser(
+        "experimental",
+        help="emit eval-able EXPERIMENTAL_* env vars + EXPERIMENTAL_ENABLED list "
+        "(unified interface for SKILL.md to gate experimental flows)",
+    )
+    p_exp.add_argument("project", nargs="?", default=None)
+    p_exp.set_defaults(func=cmd_experimental)
 
     p_paths = sub.add_parser("paths", help="print resolved paths (debug)")
     p_paths.add_argument("--project", default=None)

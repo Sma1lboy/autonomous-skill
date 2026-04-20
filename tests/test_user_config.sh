@@ -307,6 +307,41 @@ T=$(make_project)
 HOME="$H" python3 "$UC" init --scope project --project "$T" > /dev/null
 assert_file_exists "$T/.autonomous/config.json" "init writes project config"
 
+# ── 14.5. experimental subcommand (unified SKILL.md gate) ──────────────
+
+echo ""
+echo "14.5. experimental subcommand"
+
+H=$(sandbox_home)
+T=$(make_project)
+HOME="$H" python3 "$UC" setup --scope global --worktrees on > /dev/null
+
+OUT=$(HOME="$H" python3 "$UC" experimental "$T")
+assert_contains "$OUT" "EXPERIMENTAL_PARALLEL_SPRINTS=false" "parallel flag false by default"
+assert_contains "$OUT" "EXPERIMENTAL_VIRA_WORKTREE=false" "vira flag false by default"
+assert_contains "$OUT" 'EXPERIMENTAL_ENABLED=""' "nothing enabled by default"
+
+HOME="$H" python3 "$UC" set experimental.parallel_sprints true --scope global > /dev/null
+OUT=$(HOME="$H" python3 "$UC" experimental "$T")
+assert_contains "$OUT" "EXPERIMENTAL_PARALLEL_SPRINTS=true" "parallel flag true after set"
+assert_contains "$OUT" 'EXPERIMENTAL_ENABLED="parallel_sprints"' "enabled list includes parallel_sprints"
+
+HOME="$H" python3 "$UC" set experimental.vira_worktree true --scope global > /dev/null
+OUT=$(HOME="$H" python3 "$UC" experimental "$T")
+assert_contains "$OUT" "EXPERIMENTAL_VIRA_WORKTREE=true" "vira now true"
+
+eval "$(HOME="$H" python3 "$UC" experimental "$T")"
+assert_eq "$EXPERIMENTAL_PARALLEL_SPRINTS" "true" "eval sets EXPERIMENTAL_PARALLEL_SPRINTS"
+assert_eq "$EXPERIMENTAL_VIRA_WORKTREE" "true" "eval sets EXPERIMENTAL_VIRA_WORKTREE"
+
+OUT=$(HOME="$H" EXPERIMENTAL_PARALLEL_SPRINTS=0 python3 "$UC" experimental "$T")
+assert_contains "$OUT" "EXPERIMENTAL_PARALLEL_SPRINTS=false" "env var overrides config to false"
+
+T2=$(make_project)
+HOME="$H" python3 "$UC" set experimental.parallel_sprints false --scope project --project "$T2" > /dev/null
+OUT=$(HOME="$H" python3 "$UC" experimental "$T2")
+assert_contains "$OUT" "EXPERIMENTAL_PARALLEL_SPRINTS=false" "project false overrides global true"
+
 # ── 15. Schema file exists and is valid ─────────────────────────────────
 
 echo ""

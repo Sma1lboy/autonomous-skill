@@ -37,6 +37,7 @@ Conductor (SKILL.md, user's CC session)
 - `scripts/evaluate-sprint.py` — Read summary JSON, update conductor state
 - `scripts/merge-sprint.py` — Merge or discard sprint branch
 - `scripts/worktree.py` — Per-sprint git worktree manager (opt-in via `AUTONOMOUS_SPRINT_WORKTREES=1`): creates `.worktrees/sprint-N/` with symlinked `.autonomous/`, removes on success
+- `scripts/parallel-sprint.py` — **Experimental V2.** K-parallel sprint orchestrator gated by `experimental.parallel_sprints=true` + `mode.worktrees=true`. Dispatches K workers concurrently, waits for all, merges serially (first conflict aborts the wave, preserves remaining worktrees for inspection). Max parallel capped by `experimental.max_parallel_sprints` (default 3). Not wired into SKILL.md yet — invoke manually via `parallel-sprint.py run`.
 - `scripts/write-summary.py` — Generate sprint-summary.json
 - `scripts/conductor-state.py` — Conductor state management (atomic writes, PID lock, phase transitions; emits timeline events)
 - `scripts/timeline.py` — Append-only JSONL session event log at `.autonomous/timeline.jsonl` (session-start, sprint-start, sprint-end, phase-transition, session-end)
@@ -158,7 +159,7 @@ then set `{"template":"<name>"}` in `skill-config.json` (or the project override
 
 ## Testing
 
-712 tests across 13 suites, all pure bash:
+739 tests across 14 suites, all pure bash:
 
 ```bash
 bash tests/test_conductor.sh    # 99 tests: state management, phase transitions, exploration, stale cleanup, input validation, CLI help
@@ -174,6 +175,7 @@ bash tests/test_careful_hook.sh # 97 tests: PreToolUse hook pattern matching, ad
 bash tests/test_checkpoint.sh   # 70 tests: save/list/latest/show, path-traversal rejection, YAML injection resistance, type-unsafe JSON, non-UTF8
 bash tests/test_worktree.sh     # 65 tests: per-sprint worktree CRUD, symlink escape refusal, branch validation, registered-worktree guard, merge-sprint --keep-branch
 bash tests/test_user_config.sh  # 62 tests: config precedence, legacy migration, malformed config, experimental flags + warnings, init command, $schema reference, schema file integrity
+bash tests/test_parallel_sprint.sh # 27 tests: V2 parallel orchestrator — gating, validation, E2E wave dispatch + serial merge + worktree teardown, max-parallel sources
 python3 -m compileall scripts   # quick syntax check
 ```
 

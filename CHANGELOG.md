@@ -4,6 +4,14 @@ All notable changes to autonomous-skill are documented here.
 
 ## [Unreleased]
 
+### Added (experimental V2 parallel sprints)
+- `scripts/parallel-sprint.py` — V2 parallel sprint orchestrator. Dispatches K workers concurrently in isolated worktrees, waits for all to complete, merges in order serially. First merge conflict aborts the wave and preserves remaining worktrees + branches for inspection. Gated by `experimental.parallel_sprints=true` AND `mode.worktrees=true` — both must be on. Commands: `check`, `run`.
+- `experimental.max_parallel_sprints` config key (default 3). Also honored via `AUTONOMOUS_MAX_PARALLEL_SPRINTS` env var and `--max-parallel` CLI flag. Precedence: CLI > env > config > default.
+- `tests/test_parallel_sprint.sh` — 27 tests covering gating, directions validation, end-to-end wave (2 sprints dispatched, merged, worktrees cleaned up, branches deleted), max_parallel source precedence.
+- `tests/claude` mock extended with `MOCK_CLAUDE_WRITE_SUMMARY=1` — writes a fake `sprint-N-summary.json` and makes real git commits inside the worktree, so parallel-sprint.py's E2E test can exercise the full dispatch→merge flow without a real Claude session.
+- Not wired into `autonomous/SKILL.md` yet. The script is usable standalone for hackers who enable the flag manually; conductor-level integration will land in a follow-up once the flow is stable.
+
+
 ### Added (experimental flags + schema)
 - `schemas/autonomous-config.schema.json` — JSON Schema (draft-07) documenting every field in `~/.claude/autonomous/config.json` with per-key descriptions. IDEs pick it up via `$schema` for autocomplete.
 - `user-config.py init` — write a fully-populated sample config (all sections, defaults, `$schema` reference) at global or project scope. Refuses to overwrite existing configs.

@@ -7,8 +7,40 @@
 #   MOCK_CLAUDE_DELAY   Sleep N seconds before responding (timeout tests)
 #   MOCK_CLAUDE_EXIT    Exit code to return (default: 0) — exits before output
 #   MOCK_CLAUDE_OUTPUT  Persona text for --output-format json responses
+#   MOCK_CLAUDE_WRITE_SUMMARY  If set, inspect CWD basename for `sprint-N`;
+#                              when matched, write a fake sprint-N-summary.json
+#                              into .autonomous/ (relative to CWD, follows the
+#                              worktree→main-tree symlink). Used by
+#                              test_parallel_sprint.sh to simulate workers
+#                              completing in parallel without a real claude run.
+#   MOCK_CLAUDE_SUMMARY_COMMITS
+#                              Comma-separated list of fake commit hashes
+#                              to embed in the written summary (default "c1,c2")
 
 [ -n "${MOCK_CLAUDE_DELAY:-}" ] && sleep "$MOCK_CLAUDE_DELAY"
+
+# Write sprint summary first (before any exit-code shortcut) so tests can
+# simulate a worker that produced output but then died.
+if [ -n "${MOCK_CLAUDE_WRITE_SUMMARY:-}" ]; then
+  CWD_BASE=$(basename "$(pwd)")
+  case "$CWD_BASE" in
+    sprint-*)
+      SPRINT_N=${CWD_BASE#sprint-}
+      mkdir -p .autonomous
+      COMMITS_RAW="${MOCK_CLAUDE_SUMMARY_COMMITS:-c1,c2}"
+      COMMITS_JSON=$(python3 -c "import json,sys; print(json.dumps([c for c in '$COMMITS_RAW'.split(',') if c]))")
+      cat > ".autonomous/sprint-${SPRINT_N}-summary.json" <<JSON
+{"status":"complete","summary":"mock sprint ${SPRINT_N}","commits":${COMMITS_JSON},"direction_complete":true}
+JSON
+      # Make real commits on the current branch so merge-sprint.py has something to merge.
+      for C in ${COMMITS_RAW//,/ }; do
+        echo "sprint-${SPRINT_N} change for ${C}" > "sprint-${SPRINT_N}-${C}.txt"
+        git add "sprint-${SPRINT_N}-${C}.txt" >/dev/null 2>&1 || true
+        git -c user.email=mock@test -c user.name=mock commit -q -m "mock(${SPRINT_N}): ${C}" >/dev/null 2>&1 || true
+      done
+      ;;
+  esac
+fi
 
 # Non-zero exit — bail before producing any output (simulates API/network error)
 if [ "${MOCK_CLAUDE_EXIT:-0}" != "0" ]; then

@@ -19,6 +19,11 @@ _UPD=$(bash "$SCRIPT_DIR/scripts/update-check.sh" 2>/dev/null || true)
 [ -n "$_UPD" ] && echo "$_UPD" || true
 CONFIG_STATUS=$(python3 "$SCRIPT_DIR/scripts/user-config.py" check "$(pwd)" 2>/dev/null || echo "needs-setup")
 echo "CONFIG_STATUS=$CONFIG_STATUS"
+# Unified experimental-feature gate. Emits EXPERIMENTAL_* env vars + a
+# space-separated EXPERIMENTAL_ENABLED list. Adding a new experimental
+# feature (new flag in schemas/autonomous-config.schema.json + user-config.py's
+# EXPERIMENTAL_KEYS) surfaces here automatically — SKILL.md doesn't need edits.
+eval "$(python3 "$SCRIPT_DIR/scripts/user-config.py" experimental "$(pwd)" 2>/dev/null || true)"
 python3 "$SCRIPT_DIR/scripts/persona.py" "$(pwd)" >/dev/null 2>&1
 python3 "$SCRIPT_DIR/scripts/startup.py" "$(pwd)"
 ```
@@ -109,6 +114,28 @@ Your job is to:
 2. Dispatch a sprint master for each sprint
 3. Evaluate results and decide what comes next
 4. Transition from directed work to autonomous exploration when the mission is done
+
+## Experimental features (unified gate)
+
+Startup eval'd `EXPERIMENTAL_*` env vars from `user-config.py experimental`.
+Consult `$EXPERIMENTAL_ENABLED` (space-separated short names) to see what's on.
+Each flag changes a specific phase of the loop:
+
+| Flag (env var) | Affects | Behavior when on |
+|---|---|---|
+| `EXPERIMENTAL_PARALLEL_SPRINTS` | Plan + Dispatch | Plan waves of K disjoint sprints, dispatch via `scripts/parallel-sprint.py run` |
+| `EXPERIMENTAL_VIRA_WORKTREE` | (reserved, no-op) | Feature tracked, implementation pending |
+
+**If `$EXPERIMENTAL_ENABLED` is non-empty, announce it to the user in ONE
+line at startup** (e.g., `Experimental mode: parallel_sprints`) so they
+know the session isn't using the standard flow. Then proceed.
+
+**Adding a new experimental feature** (for contributors):
+1. Add the flag to `schemas/autonomous-config.schema.json` under `experimental`
+2. Add it to `EXPERIMENTAL_KEYS` + `DEFAULTS["experimental"]` + `BOOL_KEYS` in `scripts/user-config.py`
+3. Write the alternative flow as a script under `scripts/`
+4. Add a row to the table above and a section describing the alt flow
+5. SKILL.md auto-detects the flag via the startup eval — no prompt rewrites needed
 
 ## Session
 
@@ -211,7 +238,37 @@ python3 "$SCRIPT_DIR/scripts/backlog.py" update "$(pwd)" "<item-id>" priority 2
 
 ### 2. Dispatch — Run the Sprint
 
+**Parallel wave mode (experimental).** If `EXPERIMENTAL_PARALLEL_SPRINTS=true`
+AND `WORKTREE_MODE=true`, plan a **wave of K independent sprints** (not just one)
+and dispatch them concurrently. Rules:
+
+- K is capped by `experimental.max_parallel_sprints` (default 3).
+- Every direction in the wave must be **file-disjoint** from every other
+  — no two sprints should plausibly touch the same files. If you can't
+  find K disjoint directions, fall back to a serial wave of 1.
+- After the wave completes, merges happen serially in order. First conflict
+  aborts the wave and preserves the remaining worktrees for inspection.
+
 ```bash
+if [ "${EXPERIMENTAL_PARALLEL_SPRINTS:-false}" = "true" ] && [ "${WORKTREE_MODE:-false}" = "true" ]; then
+  # Start sprint numbers: conductor-state tracks running count
+  START_SPRINT=$(python3 -c "import json; d=json.load(open('.autonomous/conductor-state.json')); print(len(d.get('sprints', [])) + 1)")
+  # DIRECTIONS_JSON must be a JSON array of strings (plan K disjoint directions)
+  # Example: DIRECTIONS_JSON='["add user model","add auth middleware","add /login endpoint"]'
+  # Record each as a sprint-start in conductor-state before dispatch
+  for DIR_I in $(python3 -c "import json,sys; [print(d) for d in json.loads(sys.argv[1])]" "$DIRECTIONS_JSON"); do
+    python3 "$SCRIPT_DIR/scripts/conductor-state.py" sprint-start "$(pwd)" "$DIR_I" > /dev/null
+  done
+  # Dispatch the whole wave via the orchestrator (creates worktrees, dispatches
+  # concurrently, waits, merges serially, cleans up)
+  python3 "$SCRIPT_DIR/scripts/parallel-sprint.py" run "$(pwd)" "$SCRIPT_DIR" \
+    "$SESSION_BRANCH" "$START_SPRINT" --directions "$DIRECTIONS_JSON"
+  # Skip the rest of this step 2 — parallel-sprint.py already merged + cleaned up.
+  # Continue to step 3 (Monitor → no-op in parallel mode) and step 4 (Evaluate)
+  # for each sprint in the wave.
+else
+  # ---- Serial (default) path below ----
+
 python3 "$SCRIPT_DIR/scripts/conductor-state.py" sprint-start "$(pwd)" "$SPRINT_DIRECTION"
 SPRINT_NUM=$(python3 -c "import json; d=json.load(open('.autonomous/conductor-state.json')); print(len(d['sprints']))")
 SPRINT_BRANCH="${SESSION_BRANCH}-sprint-${SPRINT_NUM}"
@@ -233,12 +290,18 @@ PREV_SUMMARY=""
   PREV_SUMMARY=$(cat ".autonomous/sprint-$((SPRINT_NUM-1))-summary.json")
 python3 "$SCRIPT_DIR/scripts/build-sprint-prompt.py" "$(pwd)" "$SCRIPT_DIR" "$SPRINT_NUM" "$SPRINT_DIRECTION" "$PREV_SUMMARY"
 python3 "$SCRIPT_DIR/scripts/dispatch.py" "$SPRINT_DIR" .autonomous/sprint-prompt.md "sprint-$SPRINT_NUM"
+fi  # end of serial (default) path; skipped when parallel wave mode fired above
 ```
 
 ### 3. Monitor — Wait for Sprint Completion
 
+In parallel wave mode (`EXPERIMENTAL_PARALLEL_SPRINTS=true`), `parallel-sprint.py run`
+already polled every sprint's summary before returning — skip this step.
+
 ```bash
-python3 "$SCRIPT_DIR/scripts/monitor-sprint.py" "$(pwd)" "$SPRINT_NUM"
+if [ "${EXPERIMENTAL_PARALLEL_SPRINTS:-false}" != "true" ]; then
+  python3 "$SCRIPT_DIR/scripts/monitor-sprint.py" "$(pwd)" "$SPRINT_NUM"
+fi
 ```
 
 ### 4. Evaluate — Read Results and Decide Next
